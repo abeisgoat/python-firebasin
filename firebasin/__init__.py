@@ -32,9 +32,15 @@ class Structure(dict):
 			if '.data' in self[path] and self[path]['.data'] and not path_data:
 				change = ['delete', path, None]
 				self[path]['.data'] = None
+
 			elif '.data' in self[path] and self[path]['.data'] and path_data:
 				change = ['update', path, path_data]
 				self[path]['.data'] = path_data
+
+				#for self_path in self.keys():
+				#	if self_path[:len(path)] == path and self_path != path:
+				#		self[self_path]['.data'] = None
+
 			else:
 				change = ['create', path, path_data]
 				self[path]['.data'] = path_data
@@ -68,14 +74,13 @@ class Structure(dict):
 						self.trigger(a, 'value', data=self.objectify(a))
 
 				if action == 'update':
+					#print action,path,value
 					self.trigger(path, 'value', data=value)
 					for a in all_ancestors:
 						self.trigger(a, 'child_changed', data=value, snapshotPath=path)
 						self.trigger(a, 'value', data=self.objectify(a))
 
 				if action == 'delete':
-					print action,path,value
-					print path,parent,ancestors
 					data = self.objectify(path)
 					self.trigger(path, 'value', data=data)
 					self.trigger(parent, 'child_removed', data=data, snapshotPath=path)
@@ -100,13 +105,6 @@ class Structure(dict):
 			path_node = self[path]
 			#print path_node, path
 			if path_node and event_key in path_node:
-				# There is a pretty good chance that trigger gets called even
-				# though our data hasn't changed. For example, when a parent gets
-				# updated with an object, a value is triggered. Then each of the 
-				# children gets updated and thus value is triggered on all ancestors
-				# (including) the parent, so we end up with duplicate calls, so we
-				# don't do anything if .last-data is the same as data
-				print data, path_node.get('.last-data')
 				# If the "updated" data and the old data are the same, don't do anything
 				if data != path_node.get('.last-data'):
 					if data==None:
@@ -130,40 +128,34 @@ class Structure(dict):
 
 
 	def objectify(self, path):
-		children = sorted(self.children(path), key=lambda d: len(d))
-		# This path_length hack breaks stuff, it, replace with proper node removing
-		path_length = len(path)
-		obj = {}   
-		if len(children) > 1:
-			for child_path in children:
-				nodes = child_path[path_length:].split('/')
-				o = obj
-				for node in nodes:
-					if node:	
-						if not node in o:
-							if self[child_path].get('.data', False):
-								data = self[child_path]['.data']
-								o[node] = data
-							else:
-								o[node] = {}
-						o = o[node]
-						
-		else:
-			obj = self[path]['.data']
+		def recursive(rpath):
+			obj = {}
+			data = self[rpath].get('.data', {})
 
-		def clean(tree):
-			if type(tree) == type(dict()):
-				for child in tree.keys():
-					if tree[child] == {}:
-						tree.pop(child)
-					elif type(tree[child]) == type(dict()):
-						clean(tree[child])
+			if type(data) != type(dict()):
+				return data
 
-		clean(obj)
+			for key in data.keys():
+				kpath = os.path.join(rpath, key)
+				kpath_node = self[kpath]
+				if '.data' in kpath_node:
+					kpath_data = kpath_node['.data']
+					if kpath_data:
+						if type(kpath_data) == type(dict()):
+							obj[key] = recursive(kpath)
+						else:
+							obj[key] = kpath_data
+					else:
+						obj[key] = None
+				else:
+					obj[key] = None
+			return obj
+
+		obj = recursive(path)
 		return obj
 
-
 	def children(self, path):
+		# This needs to be updated to remove len hack
 		return [a for a in self.keys() if a[:len(path)] == path]
 
 # Connection which threads the handshake and data websockets into a managable bundle
@@ -258,7 +250,8 @@ class DataRef(object):
 		self.parent.structure[self.path]['.'+event] = events
 		#print self.parent.structure[self.path], self.path
 
-		if not self.path in self.parent.subscriptions:
+		canSubscribe = not any([s.split('/')==self.path.split('/')[:len(s.split('/'))] for s in self.parent.subscriptions])
+		if canSubscribe:
 			print 'Subscribing to', self.path
 			self.parent.subscriptions.append(self.path)
 
@@ -431,6 +424,7 @@ if __name__ == '__main__':
 	sms.on('child_added', p)
 	sms.on('child_removed', pr)
 	sms.child('dat').on('value', pa)
+	#sms.child('dat/cat').set({"mat": "hat"})
 	sms.child("test").on('child_added', ba)
 	sms.child("test").on('value', bo)
 	#sms.child('dat').set('trap')
