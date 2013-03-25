@@ -10,53 +10,39 @@ class Structure(dict):
 		changes = []
 		def recursive(path, path_data):
 			if type(path_data) == type(dict()) and path_data: 
-				#print path_data, '<da fuck i sth'
 				for node in path_data:
 					node_path = os.path.join(path, node)
 					node_data = path_data[node]
 
 					if type(node_data) != type(dict()):
-						if node_data:
-							if node_path in self:
-								if '.data' in self[node_path] and self[node_path]['.data']:
-									changes.append(['update', node_path, node_data])
-									self[node_path][".data"] = path_data[node]
-								else:
-									changes.append(['create', node_path, node_data])
-									self[node_path][".data"] = path_data[node]	
-							else:
-								changes.append(['create', node_path, node_data])
-								self[node_path] = {".data": path_data[node]}
-
-						else:
-							changes.append(['delete', node_path, node_data])
-							self[node_path][".data"] = None
+						changes.append( self.storeOne(node_path, node_data) )
 					else:
-						if node_path in self:
-							if '.data' in self[node_path] and self[node_path]['.data']:
-								changes.append(['update', node_path, node_data])
-								self[node_path]['.data'] = None
-							else:
-								changes.append(['create', node_path, node_data])
-								self[node_path]['.data'] = None							
-						else:
-							changes.append(['create', node_path, node_data])
-							self[node_path] = {".data": None}
-
+						changes.append( self.storeOne(node_path, node_data) )
 						recursive(node_path, node_data)
 			else:
-				if path in self: 
-					if '.data' in self[path] and self[path]['.data'] and not path_data:
-						changes.append(['delete', path, self.objectify(path)])
-						self[path]['.data'] = path_data
-				else:
-					changes.append(['create', path, path_data])
-					self[path] = {'.data': path_data}
+				changes.append(self.storeOne(path, path_data))
 
 		recursive(root_path, root_path_data)
-		#print changes
 		self.react(changes)
 		return True
+
+	def storeOne(self, path, path_data):
+		change = []
+		if path in self: 
+			if '.data' in self[path] and self[path]['.data'] and not path_data:
+				change = ['delete', path, None]
+				self[path]['.data'] = None
+			elif '.data' in self[path] and self[path]['.data'] and path_data:
+				change = ['update', path, path_data]
+				self[path]['.data'] = path_data
+			else:
+				change = ['create', path, path_data]
+				self[path]['.data'] = path_data
+		else:
+			change = ['create', path, path_data]
+			self[path] = {'.data': path_data}
+
+		return change
 
 	def react(self, log):
 		#print log
@@ -73,8 +59,6 @@ class Structure(dict):
 				# Once we know which paths are effected by the changes we
 				# can make the proper calls to update them. 
 
-				# Value doesn't appear to be being called as aggresively as needed, it doesn't call
-				# when child nodes are updated, so yeah that should get fixed.
 				if action == 'create':
 					self.trigger(path, 'value', data=value)	
 					if value:
@@ -85,14 +69,16 @@ class Structure(dict):
 
 				if action == 'update':
 					self.trigger(path, 'value', data=value)
-					for a in ancestors:
-						# Prolly need a snapshotPath set here
-						self.trigger(a, 'child_changed', data=value)
+					for a in all_ancestors:
+						self.trigger(a, 'child_changed', data=value, snapshotPath=path)
 						self.trigger(a, 'value', data=self.objectify(a))
 
 				if action == 'delete':
-					self.trigger(path, 'value', data=value)
-					self.trigger(parent, 'child_removed', data=value, snapshotPath=path)
+					print action,path,value
+					print path,parent,ancestors
+					data = self.objectify(path)
+					self.trigger(path, 'value', data=data)
+					self.trigger(parent, 'child_removed', data=data, snapshotPath=path)
 
 					for a in all_ancestors:
 						self.trigger(a, 'value', data=self.objectify(a))
@@ -104,7 +90,7 @@ class Structure(dict):
 			ancestors.append('/'.join(nodes[:-n]))
 		return [a for a in ancestors if a]
 
-	def trigger(self, path, event, data=None, snapshotPath=None):
+	def trigger(self, path, event, data, snapshotPath=None):
 		event_key = '.'+event
 
 		if not snapshotPath:
@@ -114,12 +100,29 @@ class Structure(dict):
 			path_node = self[path]
 			#print path_node, path
 			if path_node and event_key in path_node:
-				callbacks = path_node[event_key]
+				# There is a pretty good chance that trigger gets called even
+				# though our data hasn't changed. For example, when a parent gets
+				# updated with an object, a value is triggered. Then each of the 
+				# children gets updated and thus value is triggered on all ancestors
+				# (including) the parent, so we end up with duplicate calls, so we
+				# don't do anything if .last-data is the same as data
+				print data, path_node.get('.last-data')
+				# If the "updated" data and the old data are the same, don't do anything
+				if data != path_node.get('.last-data'):
+					if data==None:
+						# If data is None, we pass the old data (for DELETE)
+						snapshotData = path_node.get('.last-data')
+					else:
+						# Otherwise we just set last-data appropriately and set snapshotData to the new data
+						path_node['.last-data'] = data
+						snapshotData = data
 
-				obj = DataSnapshot(snapshotPath, data)
+					callbacks = path_node[event_key]
 
-				for callback in callbacks:
-					callback(obj)
+					obj = DataSnapshot(snapshotPath, snapshotData)
+
+					for callback in callbacks:
+						callback(obj)
 			else:
 				return False
 		else:
@@ -136,13 +139,15 @@ class Structure(dict):
 				nodes = child_path[path_length:].split('/')
 				o = obj
 				for node in nodes:
-					if node:
+					if node:	
 						if not node in o:
 							if self[child_path].get('.data', False):
-								o[node] = self[child_path]['.data']
+								data = self[child_path]['.data']
+								o[node] = data
 							else:
 								o[node] = {}
 						o = o[node]
+						
 		else:
 			obj = self[path]['.data']
 
@@ -169,7 +174,6 @@ class Connection(threading.Thread):
 		self.parsed_url = self.parse_url(url)
 		self.parent = parent
 		self.outgoing_quene = []
-		self.incoming_quene = []
 		self.url = None
 		self.handshake = None
 		self.data = None
@@ -194,18 +198,27 @@ class Connection(threading.Thread):
 		self.connect()
 
 	def connect(self):
+		# Sometimes self.url is a dictionary with extra data, definitely don't know why that is.
+		if type(self.url) == type(dict()):
+			print 'Dictionary URL Received'
+			self.url = self.url['h']
+
 		self.data = DataClient('wss://' + self.url + '/.ws?v=5&ns=' + self.parsed_url[0])
-		self.data.on_opened = self.process_outgoing_quene
+		self.data.on_opened = self.send_outgoing
+
+		def on_connected():
+			self.connected = True
 
 		def on_received(o):
-			self.incoming_quene.append(o)
-			self.parent.process_incoming_quene()
+			self.parent.process_incoming(o)
 
 		def on_closed(data):
+			self.connected = False
 			self.stopped = True
 
 		self.data.on_received = on_received
 		self.data.on_closed = on_closed
+		self.data.on_connected = on_connected
 
 		self.data.connect()
 
@@ -214,9 +227,15 @@ class Connection(threading.Thread):
 
 		self.data.close()
 
-	def process_outgoing_quene(self):
+	def send_outgoing(self):
 		for message in self.outgoing_quene:
 			self.data.send(json.dumps(message))
+
+	def send(self, message):
+		if not self.connected:
+			self.outgoing_quene.append(message)
+		else:
+			self.data.send(message)
 
 	# All internal functions are shown here
 	def parse_url(self, url):
@@ -240,10 +259,16 @@ class DataRef(object):
 		#print self.parent.structure[self.path], self.path
 
 		if not self.path in self.parent.subscriptions:
+			print 'Subscribing to', self.path
 			self.parent.subscriptions.append(self.path)
 
+			# A message with a(ction) of l(isten)
 			message = {"t":"d","d":{"r":1,"a":"l","b":{"p":self.path}}}
-			self.parent.c.outgoing_quene.append(message)
+			self.parent.c.send(message)
+
+	def set(self, data):
+		message = {"t":"d","d":{"r":2, "a":"p", "b":{"p":self.path, "d":data }}}
+		self.parent.c.send(message)
 
 	# Get a DataRef to a child of this DataRef
 	def child(self, path):
@@ -268,7 +293,10 @@ class DataSnapshot(object):
 		self.path = path
 
 	def val(self): 
-		return {key:value for (key, value) in self.data.items() if key[0] != '.'}
+		if type(self.data) == type(dict()):
+			return {key:value for (key, value) in self.data.items() if key[0] != '.'}
+		else:
+			return self.data
 
 	def child(self, childPath):
 		c = self.data
@@ -332,38 +360,36 @@ class Firebase(DataRef):
 		self.c.start()
 		DataRef.__init__(self, self, '')
 
-	def process_incoming_quene(self):
-		for message in self.c.incoming_quene:
-			# If message type is data
-			if message['t'] == 'd':
-				data = message['d']
-				# If r is in data and set to 1 then it's probably a response 
-				# to something we sent like a sub request or an auth token
-				if 'r' in data and data['r']:
-					b = data['b'] # B is where the majority of data relavant to the request is stored
-					if b['s'] == 'invalid_token':
-						# If an auth callback was specified when DataRef.auth was called, let it know it didn't go through
-						if self.auth_callback:
-							self.auth_callback(b, None)
-					if b['s'] == 'permission_denied':
-						pass
-
-				# If t is in data then it's the response to the initial connection
-				elif 't' in data:
+	def process_incoming(self, message):
+		# If message type is data
+		if message['t'] == 'd':
+			data = message['d']
+			# If r is in data and set to 1 then it's probably a response 
+			# to something we sent like a sub request or an auth token
+			if 'r' in data and data['r']:
+				b = data['b'] # B is where the majority of data relavant to the request is stored
+				if b['s'] == 'invalid_token':
+					# If an auth callback was specified when DataRef.auth was called, let it know it didn't go through
+					if self.auth_callback:
+						self.auth_callback(b, None)
+				if b['s'] == 'permission_denied':
 					pass
 
-				# If a is in data, it's a new data blob for a node
-				elif 'a' in data:
-					b = data['b']
-					path = b['p']
-					path_data = b['d']
-					
-					self.store(path, path_data)
-
-			# If message type is... control?
-			if message['t'] == 'c':
+			# If t is in data then it's the response to the initial connection
+			elif 't' in data:
 				pass
-		self.c.incoming_quene = []
+
+			# If a is in data, it's a new data blob for a node
+			elif 'a' in data:
+				b = data['b']
+				path = b['p']
+				path_data = b['d']
+				
+				self.store(path, path_data)
+
+		# If message type is... control?
+		if message['t'] == 'c':
+			pass
 
 	def store(self, path, path_data):
 		self.structure.store(path, path_data)
@@ -394,10 +420,11 @@ if __name__ == '__main__':
 	fb = Firebase('https://greatblue.firebaseio.com')
 
 	def p(d):  print str(d.name()) + ' < child_added to /sms '
-	def pa(d): print str(d.name()) + ' < value of /sms/dat'
-	def pr(d): print str(d.name()) + ' < child_removed from /sms'
+	def pa(d): print str(d.val())  + ' < value of /sms/dat'
+	def pr(d): print str(d.val()) + ' < child_removed from /sms'
 	def ba(d): print str(d.name()) + ' < child_added to /sms/test'
 	def bo(d): print str(d.name()) + str(d.val()) + ' < value of test '
+	def cc(d): print str(d.name()) + ' < sms child changed'
 
 	fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0MTk2NTUxLCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.7zxE63N_oLpgSvfVojtU6nNsdbnLopRS6WRF5j_JK5A')
 	sms = fb.child('sms')
@@ -406,6 +433,7 @@ if __name__ == '__main__':
 	sms.child('dat').on('value', pa)
 	sms.child("test").on('child_added', ba)
 	sms.child("test").on('value', bo)
+	#sms.child('dat').set('trap')
 
 	try:
 		while 1: time.sleep(1)
