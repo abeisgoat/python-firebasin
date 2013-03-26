@@ -74,7 +74,6 @@ class Structure(dict):
 				if action == 'create':
 					self.trigger(path, 'value', data=value)	
 					if value:
-						print 'Child added on', path, parent
 						self.trigger(parent, 'child_added', data=value, snapshotPath=path)
 
 					for a in all_ancestors:
@@ -97,14 +96,13 @@ class Structure(dict):
 	def trigger(self, path, event, data, snapshotPath=None):
 		'''Call all functions related to an event on path.'''
 
-		event_key = '.'+event
+		event_key = '.event-'+event
 
 		if not snapshotPath:
 			snapshotPath = path
 
 		if path in self:
 			path_node = self[path]
-			#print path_node, path
 			if path_node and event_key in path_node:
 				# If the "updated" data and the old data are the same, don't do anything
 				if data != path_node.get('.last-data'):
@@ -313,7 +311,6 @@ class Connection(threading.Thread):
 		else:
 			self.data.send(message)
 
-	# All internal functions are shown here
 	def parse_url(self, url):
 		'''Parse a URL.'''
 
@@ -329,20 +326,8 @@ class DataRef(object):
 	def on(self, event, callback, on_cancel=None, context=None):
 		'''Connect a callback to an event.'''
 
-		structure_path = self.parent.structure.get(self.path, {})
-		self.parent.structure[self.path] = structure_path
-		events = structure_path.get('.'+event, [])
-		events.append(callback)
-		self.parent.structure[self.path]['.'+event] = events
-
-		canSubscribe = not any([s.split('/')==self.path.split('/')[:len(s.split('/'))] for s in self.parent.subscriptions])
-		if canSubscribe:
-			print 'Subscribing to', self.path
-			self.parent.subscriptions.append(self.path)
-
-			# A message with a(ction) of l(isten)
-			message = {"t":"d","d":{"r":0,"a":"l","b":{"p":self.path}}}
-			self.parent._send(message)
+		self.parent._bind(self.path, event, callback)
+		self.parent._subscribe(self.path)
 
 	def set(self, data, on_complete=None):
 		'''Write data to this Firebase location.'''
@@ -352,15 +337,17 @@ class DataRef(object):
 
 	def setWithPriority(self, data, priority, on_complete=None):
 		'''Write data like set, but also specify the priority for that data.'''
+
 		data['.priority'] = priority
 		self.set(data, on_complete=on_complete)
 
-	def setPriority(priority, on_complete=None):
-		# Gonna implement once we have update done
-		pass
+	def setPriority(self, priority, on_complete=None):
+		'''Set a priority for the data at this Firebase location.'''
+
+		self.child('.priority').set(priority)
 
 	def child(self, path):
-		'''Return a new DataRef to a child location.'''
+		'''Return a new DataRef of a child location.'''
 
 		return DataRef(self.parent, os.path.join(self.path, path))
 
@@ -402,7 +389,11 @@ class DataRef(object):
 		'''Get the absolute URL corresponding to this Firebase reference's location.'''
 		return self.__str__()
 
-	def update(self, value, on_complete=None): pass
+	def update(self, value, on_complete=None):
+		'''Similar to set, except this will overwrite only children enumerated in value.'''
+
+		message = {'t':'d','d':{'r':0,'a':'m','b':{'p':self.path,'d':value}}}
+		self.parent._send(message)
 
 	def remove(self, on_complete=None):
 		'''Remove the data at this Firebase location.'''
@@ -412,6 +403,8 @@ class DataRef(object):
 	def transaction(self, updateFunction, on_complete=None): pass
 	def off(self, event=None, callback=None, context=None): pass
 	def once(self, event, on_success=None, on_failure=None, context=None): pass
+
+	# Query methods
 	def limit(self, limit): pass
 	def startAt(self, priority=None, name=None): pass
 	def endAt(self, priority=None, name=None): pass
@@ -427,13 +420,12 @@ class DataSnapshot(object):
 		self.data = data
 		self.path = path
 
+		self.clean_data = self._clean_data(self.data)
+		
+
 	def val(self): 
 		'''Return the value of this snapshot.'''
-
-		if type(self.data) == type(dict()):
-			return {key:value for (key, value) in self.data.items() if key[0] != '.'}
-		else:
-			return self.data
+		return self.clean_data
 
 	def child(self, childPath):
 		'''Return a DataSnapshot of a child location.'''
@@ -502,6 +494,25 @@ class DataSnapshot(object):
 
 		return self.data
 
+	def _clean_data(self, data):
+		'''Cleans data of all hidden (.) fields and converts .value fields.'''
+
+		def recursive(data):
+			obj = {}
+			if isinstance(data, dict):
+				for key,value in data.items():
+					if isinstance(value, dict):
+						obj[key] = recursive(value)
+					elif not key.startswith('.'):
+						obj[key] = value
+					elif key == '.value':
+						return value
+				return obj
+			else:
+				return data
+
+		return recursive(data)
+
 class onDisconnect(object):
 	'''Allows writing or clearing of data regardless of quality of disconnect.'''
 
@@ -526,21 +537,28 @@ class onDisconnect(object):
 		data['.priority'] = priority
 		self.set(data, on_complete=on_complete)
 
-	def update(self, value, on_complete=None): pass
+	def update(self, value, on_complete=None):
+		'''Similar to set, except this will overwrite only children enumerated in value when the client is disconnected.'''
+
+		message = {'t':'d','d':{'r':0,'a':'om','b':{'p':self.path,'d':value}}}
+		self.parent._send(message)
 
 	def remove(self, on_complete=None): 
 		'''Ensure the data at this location is deleted when the client is disconnected.'''
+
 		self.set(None, on_complete=on_complete)
 
 	def cancel(self, on_complete=None): 
+		'''Cancel all previously queued onDisconnect() set or update events for this location and all children.'''
 
 		message = {"t":"d","d":{"r":0,"a":"oc","b":{"p":self.path,"d":None}}}
 		self.parent._send(message)
 
-# Firebase is the top level node which is just a DateRef with a hard-coded 
-# path, a connection, and a tree of the database
 class Firebase(DataRef):
+	'''A reference to a Firbase.'''
+
 	def __init__(self, url):
+		'''Construct a new Firebase reference from a full Firebase URL.'''
 		self.c = Connection(url, self)
 		self.base_url = url
 		self.structure = Structure()
@@ -551,7 +569,9 @@ class Firebase(DataRef):
 
 	def _process(self, message):
 		'''Process a single incoming message'''
-
+		# This whole thing needs to be rewritten to use all the new information about the protocol
+		# and to trigger callbacks based on success, failure, and cancel
+		
 		# If message type is data
 		print message
 		if message['t'] == 'd':
@@ -593,8 +613,31 @@ class Firebase(DataRef):
 		message['d']['r'] = len(self.callbacks)
 		self.c.send(message)
 
-# DataClient is just a WebSocketClient who stores the incoming messages
+	def _subscribe(self, path):
+		'''Subscribe to updates regarding a path'''
+
+		isSubscribed = any([s.split('/')==path.split('/')[:len(s.split('/'))] for s in self.subscriptions])
+		if not isSubscribed:
+			message = {"t":"d","d":{"r":0,"a":"l","b":{"p":path}}}
+			self._send(message)
+			self.subscriptions.append(path)
+			return True
+		else:
+			return False
+
+	def _bind(self, path, event, callback):
+		'''Bind a single callback to an event on a path'''
+
+		event_key = '.event-'+event
+		structure_path = self.structure.get(path, {})
+		self.structure[path] = structure_path
+		events = structure_path.get(event_key, [])
+		events.append(callback)
+		self.structure[path][event_key] = events
+
 class DataClient(WebSocketClient):
+	'''Connect to a web socket.'''
+
 	def __init__(self, url):
 		WebSocketClient.__init__(self, url)
 		self.data = []
@@ -637,10 +680,11 @@ if __name__ == '__main__':
 	sms.on('child_removed', pr)
 	sms.child('dat').on('value', pa)
 	sms.child('online').set(True)
+	sms.child('online').setPriority(100)
 	sms.child('online').onDisconnect().set(False)
 	sms.child("test").on('child_added', ba)
 	sms.child("test").on('value', bo)
-	#sms.child('dat').set('trap')
+	sms.child('dat').update({'broom': 'bristle'})
 
 	try:
 		while 1: time.sleep(1)
