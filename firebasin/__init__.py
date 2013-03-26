@@ -2,11 +2,11 @@ from ws4py.client.threadedclient import WebSocketClient
 import json, sys, time, os, threading
 
 class Structure(dict):
-	# The store function has two main jobs, firstly it stores entities
-	# in self like this: {"/my/cat": {".data": "red"}}
-	# Second, it fill changes with a list of changes to self which we
-	# then react() on to trigger any callbacks 
+	'''Hold data related to paths in an organized way.'''
+
 	def store(self, root_path, root_path_data):
+		'''Store a dict recursively as paths.'''
+
 		changes = []
 		def recursive(path, path_data):
 			if type(path_data) == type(dict()) and path_data: 
@@ -14,19 +14,21 @@ class Structure(dict):
 					node_path = os.path.join(path, node)
 					node_data = path_data[node]
 
-					if type(node_data) != type(dict()):
-						changes.append( self.storeOne(node_path, node_data) )
-					else:
-						changes.append( self.storeOne(node_path, node_data) )
+					change = self.store_one(node_path, node_data)
+					changes.append(change)
+
+					if type(node_data) == type(dict()):
 						recursive(node_path, node_data)
 			else:
-				changes.append(self.storeOne(path, path_data))
+				changes.append(self.store_one(path, path_data))
 
 		recursive(root_path, root_path_data)
 		self.react(changes)
 		return True
 
-	def storeOne(self, path, path_data):
+	def store_one(self, path, path_data):
+		'''Store a single dict or value as a path.'''
+
 		change = []
 		if path in self: 
 			if '.data' in self[path] and self[path]['.data'] and not path_data:
@@ -36,45 +38,49 @@ class Structure(dict):
 			elif '.data' in self[path] and self[path]['.data'] and path_data:
 				change = ['update', path, path_data]
 				self[path]['.data'] = path_data
-
-				#for self_path in self.keys():
-				#	if self_path[:len(path)] == path and self_path != path:
-				#		self[self_path]['.data'] = None
+				for anscestor in self.ancestors(path):
+					a = self.get(anscestor, {})
+					a['.data'] = {}
+					self[anscestor] = a
 
 			else:
 				change = ['create', path, path_data]
+				for anscestor in self.ancestors(path):
+					a = self.get(anscestor, {})
+					a['.data'] = {}
+					self[anscestor] = a
 				self[path]['.data'] = path_data
+
 		else:
 			change = ['create', path, path_data]
+			for anscestor in self.ancestors(path):
+				a = self.get(anscestor, {})
+				a['.data'] = {}
+				self[anscestor] = a
 			self[path] = {'.data': path_data}
 
 		return change
 
 	def react(self, log):
-		#print log
+		'''Call events based on a list of changes.'''
+
 		for action,path,value in sorted(log, key=lambda d: len(d[1])):
 			# If the path contains a . (i.e. it's meta data), just ignore it and don't call anything
 			if not '.' in path: 
-				# We get all the anscestors of this path
-				all_ancestors = self.getAncestorsPaths(path)
-				# Then take the first and mark it as the parent
+				all_ancestors = self.ancestors(path)
 				parent = all_ancestors[0]
-				# Then take the rest and put them into general ancestors
 				ancestors = all_ancestors[1:]
-
-				# Once we know which paths are effected by the changes we
-				# can make the proper calls to update them. 
 
 				if action == 'create':
 					self.trigger(path, 'value', data=value)	
 					if value:
+						print 'Child added on', path, parent
 						self.trigger(parent, 'child_added', data=value, snapshotPath=path)
 
 					for a in all_ancestors:
 						self.trigger(a, 'value', data=self.objectify(a))
 
 				if action == 'update':
-					#print action,path,value
 					self.trigger(path, 'value', data=value)
 					for a in all_ancestors:
 						self.trigger(a, 'child_changed', data=value, snapshotPath=path)
@@ -88,14 +94,9 @@ class Structure(dict):
 					for a in all_ancestors:
 						self.trigger(a, 'value', data=self.objectify(a))
 
-	def getAncestorsPaths(self, path):
-		nodes = path.split('/')
-		ancestors = []
-		for n in range(0, len(nodes)):
-			ancestors.append('/'.join(nodes[:-n]))
-		return [a for a in ancestors if a]
-
 	def trigger(self, path, event, data, snapshotPath=None):
+		'''Call all functions related to an event on path.'''
+
 		event_key = '.'+event
 
 		if not snapshotPath:
@@ -128,38 +129,113 @@ class Structure(dict):
 
 
 	def objectify(self, path):
+		'''Return an object version of a path.'''
+
 		def recursive(rpath):
 			obj = {}
 			data = self[rpath].get('.data', {})
 
+			children_paths = self.children(rpath)
+			children_last_nodes = self.last_nodes(children_paths)
+
 			if type(data) != type(dict()):
 				return data
 
-			for key in data.keys():
+			for key in children_last_nodes:
 				kpath = os.path.join(rpath, key)
 				kpath_node = self[kpath]
 				if '.data' in kpath_node:
 					kpath_data = kpath_node['.data']
-					if kpath_data:
+					if kpath_data or kpath_data == {}:
 						if type(kpath_data) == type(dict()):
 							obj[key] = recursive(kpath)
+							if obj[key] == {}:
+								obj.pop(key)
 						else:
 							obj[key] = kpath_data
-					else:
-						obj[key] = None
-				else:
-					obj[key] = None
+
 			return obj
 
 		obj = recursive(path)
 		return obj
 
-	def children(self, path):
-		# This needs to be updated to remove len hack
-		return [a for a in self.keys() if a[:len(path)] == path]
 
-# Connection which threads the handshake and data websockets into a managable bundle
+	def children(self, parent):
+		'''Return direct children of path in self.'''
+
+		parent_nodes = self.nodes(parent)
+		children = []
+		for path in self:
+			path_nodes = self.nodes(path)
+			if path_nodes[:len(parent_nodes)] == parent_nodes and len(path_nodes) == len(parent_nodes) + 1:
+				children.append(path)
+		return children
+
+
+	def descendants(Self, path):
+		'''Return all descendants of path in self.'''
+
+		parent_nodes = self.nodes(parent)
+		children = []
+		for path in self:
+			path_nodes = self.nodes(path)
+			if path_nodes[:len(parent_nodes)] == parent_nodes and path_nodes != parent_nodes:
+				children.append(path)
+		return children
+
+	def ancestors(self, path):
+		'''Return all anscestors of a path.'''
+
+		nodes = path.split('/')
+		ancestors = []
+		for n in range(0, len(nodes)):
+			ancestors.append('/'.join(nodes[:-n]))
+		return [a for a in ancestors if a]
+
+	def nodes(self, path):
+		'''Returns a list containing individual nodes in a path.'''
+
+		dirty_nodes = path.split('/')
+		clean_nodes = []
+		for node in dirty_nodes:
+			if node:
+				clean_nodes.append(node)
+		return clean_nodes
+
+	def first_node(self, path):
+		'''Return the first node in a path.'''
+
+		nodes = self.nodes(path)
+		return nodes[0]
+
+	def last_node(self, path):
+		'''Return the last node in a path.'''
+
+		nodes = self.nodes(path)
+		return nodes[-1:][0]
+
+	def first_nodes(self, paths):
+		'''Return the first nodes for each path in paths.'''
+
+		nodes = []
+		for path in paths:
+			first_node = self.first_node(path)
+			nodes.append(first_node)
+		return nodes
+
+
+	def last_nodes(self, paths):
+		'''Return the last nodes for each path in paths.'''
+
+		nodes = []
+		for path in paths:
+			last_node = self.last_node(path)
+			nodes.append(last_node)
+		return nodes
+
 class Connection(threading.Thread):
+	'''Connect to a Firebase websocket.'''
+
 	def __init__(self, url, parent):
 		threading.Thread.__init__(self)
 
@@ -173,6 +249,8 @@ class Connection(threading.Thread):
 		self.stopped = False
 
 	def run(self):
+		'''Perform a handshake then connect to a Firebase.'''
+
 		def set_url(d):
 			self.handshake.close()
 			self.url = d['d']['d']
@@ -190,6 +268,8 @@ class Connection(threading.Thread):
 		self.connect()
 
 	def connect(self):
+		'''Connect to a Firebase.'''
+
 		# Sometimes self.url is a dictionary with extra data, definitely don't know why that is.
 		if type(self.url) == type(dict()):
 			print 'Dictionary URL Received'
@@ -202,7 +282,7 @@ class Connection(threading.Thread):
 			self.connected = True
 
 		def on_received(o):
-			self.parent.process_incoming(o)
+			self.parent._process(o)
 
 		def on_closed(data):
 			self.connected = False
@@ -220,10 +300,14 @@ class Connection(threading.Thread):
 		self.data.close()
 
 	def send_outgoing(self):
+		'''Send all quened outgoing messages to Firebase.'''
+
 		for message in self.outgoing_quene:
 			self.data.send(json.dumps(message))
 
 	def send(self, message):
+		'''Send or quene a single message to a Firebase.'''
+
 		if not self.connected:
 			self.outgoing_quene.append(message)
 		else:
@@ -231,24 +315,25 @@ class Connection(threading.Thread):
 
 	# All internal functions are shown here
 	def parse_url(self, url):
+		'''Parse a URL.'''
+
 		return url.split('https://')[1].split('.')
 
-# DataRefs are used as reference to specific locations in a firebase
 class DataRef(object):
-	# Parent is a reference to the base Firebase which holds our connection object
-	# and path is a string containing a path like '/user/example/name'
+	'''Reference a specific location in a Firebase.'''
+
 	def __init__(self, parent, path):
 		self.parent = parent
 		self.path = os.path.join('/', path)
 
-	# All client facing functions are shown here
-	def on(self, event, callback):
+	def on(self, event, callback, on_cancel=None, context=None):
+		'''Connect a callback to an event.'''
+
 		structure_path = self.parent.structure.get(self.path, {})
 		self.parent.structure[self.path] = structure_path
 		events = structure_path.get('.'+event, [])
 		events.append(callback)
 		self.parent.structure[self.path]['.'+event] = events
-		#print self.parent.structure[self.path], self.path
 
 		canSubscribe = not any([s.split('/')==self.path.split('/')[:len(s.split('/'))] for s in self.parent.subscriptions])
 		if canSubscribe:
@@ -256,42 +341,103 @@ class DataRef(object):
 			self.parent.subscriptions.append(self.path)
 
 			# A message with a(ction) of l(isten)
-			message = {"t":"d","d":{"r":1,"a":"l","b":{"p":self.path}}}
-			self.parent.c.send(message)
+			message = {"t":"d","d":{"r":0,"a":"l","b":{"p":self.path}}}
+			self.parent._send(message)
 
-	def set(self, data):
-		message = {"t":"d","d":{"r":2, "a":"p", "b":{"p":self.path, "d":data }}}
-		self.parent.c.send(message)
+	def set(self, data, on_complete=None):
+		'''Write data to this Firebase location.'''
 
-	# Get a DataRef to a child of this DataRef
+		message = {"t":"d","d":{"r":0, "a":"p", "b":{"p":self.path, "d":data }}}
+		self.parent._send(message)
+
+	def setWithPriority(self, data, priority, on_complete=None):
+		'''Write data like set, but also specify the priority for that data.'''
+		data['.priority'] = priority
+		self.set(data, on_complete=on_complete)
+
+	def setPriority(priority, on_complete=None):
+		# Gonna implement once we have update done
+		pass
+
 	def child(self, path):
+		'''Return a new DataRef to a child location.'''
+
 		return DataRef(self.parent, os.path.join(self.path, path))
 
-	# Get the DateRef of the element directly above this
 	def parent(self):
+		'''Return the parent of this location.'''
+
 		if self.path != '':
 			parent_path = '/'.join(self.path.split('/')[-1:])
 			return DataRef(self.parent, parent_path)
 		else:
 			return None
 
-	def auth(self, auth_token, callback=None):
-		message = {"t":"d","d":{"r":1,"a":"auth","b":{"cred":auth_token}}}
-		self.parent.auth_callback = callback
-		self.parent.c.outgoing_quene.append(message)
+	def auth(self, auth_token, on_complete=None, on_cancel=None):
+		'''Send an authentication token.'''
+
+		message = {"t":"d","d":{"r":0,"a":"auth","b":{"cred":auth_token}}}
+		self.parent._send(message)
+
+	def unauth(self): pass
+
+	def root(self): 
+		'''Get a Firebase reference for the root of the Firebase.'''
+
+		return self.parent
+
+	def name(self):
+		'''Get the last node (name) of this Firebase location.'''
+
+		last_node = [p for p in self.path.split('/') if p][:-1]
+		if last_node:
+			return last_node
+		else:
+			return None
+
+	def __str__(self):
+		return self.parent.url + self.path
+
+	def toString(self):
+		'''Get the absolute URL corresponding to this Firebase reference's location.'''
+		return self.__str__()
+
+	def update(self, value, on_complete=None): pass
+
+	def remove(self, on_complete=None):
+		'''Remove the data at this Firebase location.'''
+		self.set(None, on_complete=on_complete)
+
+	def push(self, value, on_complete=None): pass
+	def transaction(self, updateFunction, on_complete=None): pass
+	def off(self, event=None, callback=None, context=None): pass
+	def once(self, event, on_success=None, on_failure=None, context=None): pass
+	def limit(self, limit): pass
+	def startAt(self, priority=None, name=None): pass
+	def endAt(self, priority=None, name=None): pass
+
+	def onDisconnect(self):
+		''' The onDisconnect class allows you to write or clear data when your client disconnects from the Firebase servers. '''
+		return onDisconnect(self.parent, self.path)
 
 class DataSnapshot(object):
+	'''A snapshot of data at a specific location and time.'''
+
 	def __init__(self, path, data):
 		self.data = data
 		self.path = path
 
 	def val(self): 
+		'''Return the value of this snapshot.'''
+
 		if type(self.data) == type(dict()):
 			return {key:value for (key, value) in self.data.items() if key[0] != '.'}
 		else:
 			return self.data
 
 	def child(self, childPath):
+		'''Return a DataSnapshot of a child location.'''
+
 		c = self.data
 		nodes = childPath.split('/')
 		for node in nodes:
@@ -300,6 +446,8 @@ class DataSnapshot(object):
 		return c
 
 	def forEach(self, callback):
+		'''Call a function for each child.'''
+
 		for key in self.data.keys():
 			response = callback(self.data[key])
 			if response:
@@ -307,6 +455,8 @@ class DataSnapshot(object):
 		return False
 
 	def hasChild(self, childPath):
+		'''Return True if child exists in data.'''
+
 		if type(self.data) == type(dict()):
 			nodes = childPath.split('/')
 			c = self.data
@@ -320,41 +470,90 @@ class DataSnapshot(object):
 			return False
 
 	def hasChildren(self):
+		'''Return True if data has children.'''
+
 		return type(self.data) == type(dict()) and len(self.data.keys())
 
 	def name(self):
+		'''Return name of DataSnapshot.'''
+
 		return self.path.split('/')[-1:][0]
 
 	def numChildren(self):
+		'''Return number of children.'''
+
 		if self.hasChildren():
 			return len(self.keys())
 		else:
 			return False
 
 	def ref(self):
+		'''Return a DataRef at location of DataSnapshot.'''
 		# Not sure how I'm gonna get the ref here 
 		pass
 
 	def getPriority(self): 
+		'''Return the priority of the data in this snapshot.'''
+
 		return self.data['.priority'] if '.priority' in self.data else None
 
 	def exportVal(self): 
+		'''Return all data related to this snapshot including priority.'''
+
 		return self.data
+
+class onDisconnect(object):
+	'''Allows writing or clearing of data regardless of quality of disconnect.'''
+
+	def __init__(self, parent, path):
+		self.parent = parent
+		self.path = path
+
+	def set(self, value, on_complete=None): 
+		'''Ensure the data at this location is set to the specified value when the client is disconnected.'''
+
+		message = {'t':'d','d':{'r':0,'a':'o','b':{'p':self.path,'d':value}}}
+		self.parent._send(message)
+
+	def setWithPriority(self, value, priority, on_complete=None):
+		'''Ensure the data at this location is set to the specified value and priority when the client is disconnected.'''
+
+		if isinstance(value, dict):
+			data = value
+		else:
+			data = {".value": value}
+
+		data['.priority'] = priority
+		self.set(data, on_complete=on_complete)
+
+	def update(self, value, on_complete=None): pass
+
+	def remove(self, on_complete=None): 
+		'''Ensure the data at this location is deleted when the client is disconnected.'''
+		self.set(None, on_complete=on_complete)
+
+	def cancel(self, on_complete=None): 
+
+		message = {"t":"d","d":{"r":0,"a":"oc","b":{"p":self.path,"d":None}}}
+		self.parent._send(message)
 
 # Firebase is the top level node which is just a DateRef with a hard-coded 
 # path, a connection, and a tree of the database
 class Firebase(DataRef):
 	def __init__(self, url):
 		self.c = Connection(url, self)
-		#self.structure = Tree()
+		self.base_url = url
 		self.structure = Structure()
 		self.subscriptions = []
-		self.auth_callback = None
+		self.callbacks = []
 		self.c.start()
 		DataRef.__init__(self, self, '')
 
-	def process_incoming(self, message):
+	def _process(self, message):
+		'''Process a single incoming message'''
+
 		# If message type is data
+		print message
 		if message['t'] == 'd':
 			data = message['d']
 			# If r is in data and set to 1 then it's probably a response 
@@ -362,9 +561,7 @@ class Firebase(DataRef):
 			if 'r' in data and data['r']:
 				b = data['b'] # B is where the majority of data relavant to the request is stored
 				if b['s'] == 'invalid_token':
-					# If an auth callback was specified when DataRef.auth was called, let it know it didn't go through
-					if self.auth_callback:
-						self.auth_callback(b, None)
+					pass
 				if b['s'] == 'permission_denied':
 					pass
 
@@ -378,14 +575,23 @@ class Firebase(DataRef):
 				path = b['p']
 				path_data = b['d']
 				
-				self.store(path, path_data)
+				self._store(path, path_data)
 
 		# If message type is... control?
 		if message['t'] == 'c':
 			pass
 
-	def store(self, path, path_data):
+	def _store(self, path, path_data):
+		'''Store a single path worth of data into the strucutre.'''
+
 		self.structure.store(path, path_data)
+
+	def _send(self, message):
+		'''Send a single message to Firebase.'''
+
+		self.callbacks.append({})
+		message['d']['r'] = len(self.callbacks)
+		self.c.send(message)
 
 # DataClient is just a WebSocketClient who stores the incoming messages
 class DataClient(WebSocketClient):
@@ -394,16 +600,22 @@ class DataClient(WebSocketClient):
 		self.data = []
 
 	def opened(self):
+		'''Call callback on_opened'''
+
 		print 'Connected to the data server :D'
 		if 'on_opened' in dir(self):
 			self.on_opened()
 
 	def closed(self, code, reason):
+		'''Call callback on_closed.'''
+
 		print(("Closed down :(", code, reason))
 		if 'on_closed' in dir(self):
 			self.on_closed(self.data)
 
 	def received_message(self, m):
+		'''Store received message and call on_received.'''
+
 		obj = json.loads(str(m))
 		self.data.append(obj)
 		if 'on_received' in dir(self):
@@ -419,12 +631,13 @@ if __name__ == '__main__':
 	def bo(d): print str(d.name()) + str(d.val()) + ' < value of test '
 	def cc(d): print str(d.name()) + ' < sms child changed'
 
-	fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0MTk2NTUxLCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.7zxE63N_oLpgSvfVojtU6nNsdbnLopRS6WRF5j_JK5A')
+	fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0MzQ0MzQ5LCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.YFJsFrhER3G-RVdC0_U8uwdYmUwdaM3eDANUAOXFhyc')
 	sms = fb.child('sms')
 	sms.on('child_added', p)
 	sms.on('child_removed', pr)
 	sms.child('dat').on('value', pa)
-	#sms.child('dat/cat').set({"mat": "hat"})
+	sms.child('online').set(True)
+	sms.child('online').onDisconnect().set(False)
 	sms.child("test").on('child_added', ba)
 	sms.child("test").on('value', bo)
 	#sms.child('dat').set('trap')
