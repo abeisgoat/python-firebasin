@@ -3,54 +3,52 @@ Python Firebasin
 
 Firebasin is a reimplementation of the [Firebase Javascript SDK](https://www.firebase.com/docs/javascript/firebase/index.html) in pure Python. Firebasin aims to have an interface identical to the Javascript SDK. As such, the Firebase Javascript docs can be used as temporary docs for Firebasin as the interface is identical. However, it should be noted that the implementation and internal structure of Firebasin differs greatly from the Javascript SDK. This is done intentionally as an attempt to implement things as pythonically as possible.
 
-Compatibility List
+Compatible Method List
 -----
-Firebase
-* Firebase( )			[DONE]
-* auth( )				[DONE]
-* unauth( )				[DONE]
-* child( )				[DONE]
-* parent( )				[DONE]
-* root( )				[DONE]
-* name( )				[DONE]
-* toString( )			[DONE]
-* set( )				[DONE]
-* update( )				[DONE]
-* remove( )				[DONE]
-* push( )				[DONE]
-* setWithPriority( )	[DONE]
-* setPriority( )		[DONE]
-* transaction( )		[	 ]
-* on( )					[DONE]
-* off( )				[	 ]
-* once( )				[	 ]
-* limit( )				[	 ]
-* startAt( )			[	 ]
-* endAt( )				[ 	 ]
+**Firebase**
+* Firebase( )			
+* auth( )				
+* unauth( )				
+* child( )				
+* parent( )				
+* root( )				
+* name( )				
+* toString( )			
+* set( )				
+* update( )				
+* remove( )				
+* push( )				
+* setWithPriority( )	
+* setPriority( )		
+* transaction( )		
+* on( )							
 
-Query
-* on( )					[DONE]
-* off( )				[	 ]
-* once( )				[	 ]
-* limit( )				[    ]
-* startAt( )			[    ]
-* endAt( )				[    ]
+**onDisconnect**
+* set( )				
+* setWithPriority( )	
+* update( )				
+* remove( )				
+* cancel( )				
 
-onDisconnect
-* set( )				[DONE]
-* setWithPriority( )	[DONE]
-* update( )				[DONE]
-* remove( )				[DONE]
-* cancel( )				[DONE]
+**DataSnapshot**
+* val( )				
+* child( )				
+* forEach( )			
+* hasChild( )			
+* hasChildren( )		
+* name( )				
+* numChildren( )					
+* getPriority( )		
+* exportVal( )			
 
-DataSnapshot
-* val( )				[DONE]
-* child( )				[DONE]
-* forEach( )			[DONE]
-* hasChild( )			[DONE]
-* hasChildren( )		[DONE]
-* name( )				[DONE]
-* numChildren( )		[DONE]
-* ref( )				[	 ]
-* getPriority( )		[DONE]
-* exportVal( )			[DONE]
+Incompatible Method List
+-----
+**Firebase**			
+* off( )				
+* once( )				
+* limit( )				
+* startAt( )			
+* endAt( )				
+
+**DataSnapshot**
+* ref( )				
