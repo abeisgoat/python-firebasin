@@ -1,6 +1,13 @@
 from ws4py.client.threadedclient import WebSocketClient
 import json, sys, time, os, threading
 
+verbose = False
+
+def debug(*args):
+    '''Print out data if we're in verbose mode'''
+    if verbose:
+        print args
+
 class Structure(dict):
     '''Hold data related to paths in an organized way.'''
 
@@ -270,7 +277,7 @@ class Connection(threading.Thread):
 
         # Sometimes self.url is a dictionary with extra data, definitely don't know why that is.
         if type(self.url) == type(dict()):
-            print 'Dictionary URL Received'
+            debug('Dictionary URL Received')
             self.url = self.url['h']
 
         self.data = DataClient('wss://' + self.url + '/.ws?v=5&ns=' + self.parsed_url[0])
@@ -323,25 +330,25 @@ class DataRef(object):
         self._root = root
         self.path = os.path.join('/', path)
 
-    def on(self, event, callback, on_cancel=None, context=None):
+    def on(self, event, callback, onCancel=None, context=None):
         '''Connect a callback to an event.'''
 
         self._root._bind(self.path, event, callback)
         self._root._subscribe(self.path)
 
-    def set(self, data, on_complete=None):
+    def set(self, data, onComplete=None):
         '''Write data to this Firebase location.'''
 
         message = {"t":"d", "d":{"r":0, "a":"p", "b":{"p":self.path, "d":data }}}
         self._root._send(message)
 
-    def setWithPriority(self, data, priority, on_complete=None):
+    def setWithPriority(self, data, priority, onComplete=None):
         '''Write data like set, but also specify the priority for that data.'''
 
         data['.priority'] = priority
-        self.set(data, on_complete=on_complete)
+        self.set(data, onComplete=on_complete)
 
-    def setPriority(self, priority, on_complete=None):
+    def setPriority(self, priority, onComplete=None):
         '''Set a priority for the data at this Firebase location.'''
 
         self.child('.priority').set(priority)
@@ -360,13 +367,17 @@ class DataRef(object):
         else:
             return None
 
-    def auth(self, auth_token, on_complete=None, on_cancel=None):
+    def auth(self, auth_token, onComplete=None, onCancel=None):
         '''Send an authentication token.'''
 
         message = {"t":"d", "d":{"r":0, "a":"auth", "b":{"cred":auth_token}}}
         self._root._send(message)
 
-    def unauth(self): pass
+    def unauth(self):
+        '''Unauthenticates a Firebase client (i.e. logs out).'''
+
+        message = {"t":"d","d":{"r":0,"a":"unauth","b":{}}}
+        self._root._send(message)
 
     def root(self): 
         '''Get a Firebase reference for the root of the Firebase.'''
@@ -390,20 +401,48 @@ class DataRef(object):
 
         return self.__str__()
 
-    def update(self, value, on_complete=None):
+    def update(self, value, onComplete=None):
         '''Similar to set, except this will overwrite only children enumerated in value.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'m', 'b':{'p':self.path, 'd':value}}}
         self._root._send(message)
 
-    def remove(self, on_complete=None):
+    def remove(self, onComplete=None):
         '''Remove the data at this Firebase location.'''
-        self.set(None, on_complete=on_complete)
+        self.set(None, onComplete=on_complete)
 
-    def push(self, value, on_complete=None): pass
-    def transaction(self, updateFunction, on_complete=None): pass
-    def off(self, event=None, callback=None, context=None): pass
-    def once(self, event, on_success=None, on_failure=None, context=None): pass
+    def off(self, event=None, callback=None, context=None):
+        '''Detach a callback previously attached with on.'''
+
+        node = self._root.structure.get(self.path, {})
+        eventSets = {}
+
+        if event:
+            event_key = '.event-' + event
+            eventSets[event_key] = node.get(event_key, [])
+        else:
+            events = []
+            for key,value in node.items():
+                if key.startswith('.event-'):
+                    eventSets[key] = value
+
+        for eventKey,eventSet in eventSets.items():
+            if callback and callback in eventSet:
+                eventSet.remove(callback)
+            elif event:
+                for callback in eventSet:
+                    eventSet.remove(callback)
+            eventSets[eventKey] = eventSet
+
+        for eventName,eventSet in eventSets.items():
+            node[eventName] = eventSet
+
+    def once(self, event,  successCallback=None, failureCallback=None, context=None): 
+        '''Listens for exactly one event of the specified event type, and then stops listening.'''
+        pass
+
+    def push(self, value, onComplete=None): pass
+    def transaction(self, updateFunction, onComplete=None): pass
 
     # Query methods
     def limit(self, limit): pass
@@ -521,13 +560,13 @@ class onDisconnect(object):
         self._root = parent
         self.path = path
 
-    def set(self, value, on_complete=None): 
+    def set(self, value, onComplete=None): 
         '''Ensure the data at this location is set to the specified value when the client is disconnected.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'o', 'b':{'p':self.path, 'd':value}}}
         self._root._send(message)
 
-    def setWithPriority(self, value, priority, on_complete=None):
+    def setWithPriority(self, value, priority, onComplete=None):
         '''Ensure the data at this location is set to the specified value and priority when the client is disconnected.'''
 
         if isinstance(value, dict):
@@ -536,20 +575,20 @@ class onDisconnect(object):
             data = {".value": value}
 
         data['.priority'] = priority
-        self.set(data, on_complete=on_complete)
+        self.set(data, onComplete=on_complete)
 
-    def update(self, value, on_complete=None):
+    def update(self, value, onComplete=None):
         '''Similar to set, except this will overwrite only children enumerated in value when the client is disconnected.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'om', 'b':{'p':self.path, 'd':value}}}
         self._root._send(message)
 
-    def remove(self, on_complete=None): 
+    def remove(self, onComplete=None): 
         '''Ensure the data at this location is deleted when the client is disconnected.'''
 
-        self.set(None, on_complete=on_complete)
+        self.set(None, onComplete=on_complete)
 
-    def cancel(self, on_complete=None): 
+    def cancel(self, onComplete=None): 
         '''Cancel all previously queued onDisconnect() set or update events for this location and all children.'''
 
         message = {"t":"d", "d":{"r":0, "a":"oc", "b":{"p":self.path, "d":None}}}
@@ -570,27 +609,28 @@ class Firebase(DataRef):
 
     def _process(self, message):
         '''Process a single incoming message'''
+
         # This whole thing needs to be rewritten to use all the new information about the protocol
         # and to trigger callbacks based on success, failure, and cancel
-        
+        debug(message)
+
         # If message type is data
-        print message
         if message['t'] == 'd':
             data = message['d']
             # If r is in data and set to 1 then it's probably a response 
             # to something we sent like a sub request or an auth token
-            if 'r' in data and data['r']:
+            if 'r' in data:
                 b = data['b'] # B is where the majority of data relavant to the request is stored
                 if b['s'] == 'invalid_token':
                     pass
                 if b['s'] == 'permission_denied':
                     pass
 
-            # If t is in data then it's the response to the initial connection
+            # If t is in data then it's the response to the initial connection, maybe
             elif 't' in data:
                 pass
 
-            # If a is in data, it's a new data blob for a node
+            # If a is in data, it's a new data blob for a node, maybe
             elif 'a' in data:
                 b = data['b']
                 path = b['p']
@@ -646,14 +686,14 @@ class DataClient(WebSocketClient):
     def opened(self):
         '''Call callback on_opened'''
 
-        print 'Connected to the data server :D'
+        debug('Connected to the data server :D')
         if 'on_opened' in dir(self):
             self.on_opened()
 
     def closed(self, code, reason):
         '''Call callback on_closed.'''
 
-        print(("Closed down :(", code, reason))
+        debug(("Closed down :(", code, reason))
         if 'on_closed' in dir(self):
             self.on_closed(self.data)
 
@@ -686,6 +726,7 @@ if __name__ == '__main__':
     sms.child("test").on('child_added', child_added_sms_test)
     sms.child("test").on('value', value_test)
     sms.child('dat').update({'broom': 'bristle'})
+    sms.child("test").off('value')
 
     try:
         while 1: time.sleep(1)

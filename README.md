@@ -1,5 +1,7 @@
-Python Firebasin
-================
+Python Firebasin 0.1
+====================
+
+*Please note: Very little testing has been done on Firebasin, it is considered experimental until future notice.*
 
 Firebasin is a reimplementation of the [Firebase Javascript SDK](https://www.firebase.com/docs/javascript/firebase/index.html) in pure Python. Firebasin aims to have an interface identical to the Javascript SDK. As such, the Firebase Javascript docs can be used as temporary docs for Firebasin as the interface is identical. However, it should be noted that the implementation and internal structure of Firebasin differs greatly from the Javascript SDK. This is done intentionally as an attempt to implement things as pythonically as possible.
 
@@ -21,7 +23,8 @@ Compatible Method List
 * setWithPriority( )	
 * setPriority( )		
 * transaction( )		
-* on( )							
+* on( )	
+* off( )						
 
 **onDisconnect**
 * set( )				
@@ -43,8 +46,7 @@ Compatible Method List
 
 Incompatible Method List
 -----
-**Firebase**			
-* off( )				
+**Firebase**							
 * once( )				
 * limit( )				
 * startAt( )			
