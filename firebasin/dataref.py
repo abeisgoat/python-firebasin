@@ -1,3 +1,7 @@
+import datetime
+import math
+import random
+
 from connection import *
 from structure import *
 from debug import *
@@ -130,7 +134,17 @@ class DataRef(object):
 
         self.on(event, once_wrapper)
 
-    def push(self, value, onComplete=None): pass
+    def push(self, value, onComplete=None):
+        '''Generate a new child location using a unique name and returns a Firebase reference to it.'''
+
+        pushId = self._get_push_id()
+        path = self.path + '/' + pushId
+
+        message = {"t":"d", "d":{"r":0, "a":"p", "b":{"p":path, "d":value }}}
+        self._root._send(message, {'onComplete': onComplete})
+
+        return DataRef(self._root, path)
+
     def transaction(self, updateFunction, onComplete=None): pass
 
     def limit(self, limit):
@@ -179,6 +193,30 @@ class DataRef(object):
             raise Exception("Query: Can't combine startAt(), endAt(), and limit().")
 
         return [query] if query != {} else None
+
+    def _get_push_id(self):
+        ''' Return a new string containing an ID for pushing. '''
+
+        # This is the only method interpreted directly from the Javascript SDK
+        now = datetime.datetime.now()
+        a = int(now.strftime('%s%f')[:-3])
+
+        characters = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+
+        c = [0 for p in range(0, 8)]
+        p = []
+
+        for d in reversed(range(0, 8)):
+            c[d] = characters[int(a) % 64]
+            a = math.floor(a / 64)
+
+        a = "".join(c)
+
+        for d in range(0, 12):
+            num = random.randint(0, 63)
+            a += characters[num]
+
+        return a
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''

@@ -23,6 +23,7 @@ if __name__ == '__main__':
 
     fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0ODkxNzUzLCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.hXTZg95Rt2_1o1zYEH2s2S53UGLhklcC0lNYnENiSzY')
     sms = fb.child('sms')
+    sms.push("IM DA BESTEST")
     #sms.on('child_added', child_added_sms, onCancel)
     #sms.once('child_added', child_added_sms_once)
     #sms.on('child_removed', child_removed_sms)

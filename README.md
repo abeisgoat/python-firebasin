@@ -20,8 +20,8 @@ Compatible Method List
 * update( )				
 * remove( )							
 * setWithPriority( )	
-* setPriority( )		
-* transaction( )		
+* setPriority( )	
+* push( )		
 * on( )	
 * once( )		
 * off( )
@@ -51,5 +51,6 @@ Compatible Method List
 Incompatible Method List
 -----
 **Firebase**	
-* push( )
+* transaction( )	
+
 			
