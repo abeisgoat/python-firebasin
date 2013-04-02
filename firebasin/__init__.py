@@ -1,7 +1,8 @@
-from dataref import *
+from firebase import Firebase
+import time
 
 if __name__ == '__main__':
-    fb = RootDataRef('https://greatblue.firebaseio.com')
+    fb = Firebase('https://greatblue.firebaseio.com')
 
     def child_added_sms(d):  print str(d.name()) + ' < child_added to /sms '
     def value_dat(d): print str(d.val())  + ' < value of /sms/dat'

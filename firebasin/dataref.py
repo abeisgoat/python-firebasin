@@ -1,5 +1,3 @@
-import os
-
 from connection import *
 from structure import *
 from debug import *
@@ -9,7 +7,7 @@ class DataRef(object):
 
     def __init__(self, root, path):
         self._root = root
-        self.path = os.path.join('/', path)
+        self.path = '/' + '/'.join([p for p in path.split('/') if p])
 
     def on(self, event, callback, onCancel=None, context=None):
         '''Connect a callback to an event.'''
@@ -37,7 +35,8 @@ class DataRef(object):
     def child(self, path):
         '''Return a new DataRef of a child location.'''
 
-        return DataRef(self._root, os.path.join(self.path, path))
+        clean_path = '/' + '/'.join([p for p in path.split('/') if p])
+        return DataRef(self._root, self.path+clean_path)
 
     def parent(self):
         '''Return the parent of this location.'''
@@ -160,6 +159,7 @@ class RootDataRef(DataRef):
             # If r is in data and set to 1 then it's probably a response 
             # to something we sent like a sub request or an auth token
             if 'r' in data:
+                debug(self.callbacks[data['r']-1])
                 b = data['b'] # B is where the majority of data relavant to the request is stored
                 if b['s'] == 'invalid_token':
                     pass
@@ -190,7 +190,7 @@ class RootDataRef(DataRef):
     def _send(self, message):
         '''Send a single message to Firebase.'''
 
-        self.callbacks.append({})
+        self.callbacks.append(message)
         message['d']['r'] = len(self.callbacks)
         self.connection.send(message)
 
