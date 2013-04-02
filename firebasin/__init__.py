@@ -11,7 +11,11 @@ if __name__ == '__main__':
     def value_test(d): print str(d.name()) + str(d.val()) + ' < value of test '
     def child_changed_sms(d): print str(d.name()) + ' < sms child changed'
     def child_added_sms_once(d): print str(d.name()) + ' <sms child added once!'
-    def say_body(snapshot): print (snapshot.val().get('Body'))
+    def say_body(snapshot): 
+        print snapshot.val().get('Body')
+        print snapshot.ref()
+        print snapshot.child('Body').val(), snapshot.child('Body').ref()
+        
     def say_specific(snapshot): print snapshot.val()['Body'], "<unique?"
 
     def onCancel(d): print 'On was canceled'

@@ -1,12 +1,12 @@
 class DataSnapshot(object):
     '''A snapshot of data at a specific location and time.'''
 
-    def __init__(self, path, data):
+    def __init__(self, path, data, root_ref):
         self.data = data
         self.path = path
+        self.root_ref = root_ref
 
         self.clean_data = self._clean_data(self.data)
-        
 
     def val(self): 
         '''Return the value of this snapshot.'''
@@ -15,12 +15,16 @@ class DataSnapshot(object):
     def child(self, childPath):
         '''Return a DataSnapshot of a child location.'''
 
-        child = self.data
+        childData = self.data
         nodes = childPath.split('/')
+        full_path = self.path + '/' + childPath
         for node in nodes:
             if node:
-                child = child[node]
-        return child
+                childData = childData[node]
+            else:
+                return DataSnapshot(full_path, None, self.root_ref)
+        
+        return DataSnapshot(full_path, childData, self.root_ref)
 
     def forEach(self, callback):
         '''Call a function for each child.'''
@@ -66,8 +70,8 @@ class DataSnapshot(object):
 
     def ref(self):
         '''Return a DataRef at location of DataSnapshot.'''
-        # Not sure how I'm gonna get the ref here 
-        pass
+
+        return self.root_ref.child(self.path)
 
     def getPriority(self): 
         '''Return the priority of the data in this snapshot.'''

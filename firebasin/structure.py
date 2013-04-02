@@ -3,6 +3,10 @@ from datasnapshot import *
 class Structure(dict):
     '''Hold data related to paths in an organized way.'''
 
+    def __init__(self, root_ref):
+        self.root_ref = root_ref
+        dict.__init__(self)
+
     def store(self, root_path, root_path_data):
         '''Store a dict recursively as paths.'''
 
@@ -122,7 +126,7 @@ class Structure(dict):
 
                     callbacks = path_node[event_key]
 
-                    obj = DataSnapshot(snapshotPath, snapshotData)
+                    obj = DataSnapshot(snapshotPath, snapshotData, self.root_ref)
 
                     for callback in callbacks:
                         callback(obj)

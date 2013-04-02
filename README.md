@@ -45,12 +45,11 @@ Compatible Method List
 * name( )				
 * numChildren( )					
 * getPriority( )		
-* exportVal( )			
+* exportVal( )	
+* ref( )		
 
 Incompatible Method List
 -----
 **Firebase**	
-* push( )											
-
-**DataSnapshot**
-* ref( )				
+* push( )
+			

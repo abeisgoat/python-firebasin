@@ -187,7 +187,7 @@ class RootDataRef(DataRef):
         '''Construct a new Firebase reference from a full Firebase URL.'''
         self.connection = Connection(url, self)
         self.base_url = url
-        self.structure = Structure()
+        self.structure = Structure(self)
         self.subscriptions = {}
         self.history = []
         self.connection.start()
