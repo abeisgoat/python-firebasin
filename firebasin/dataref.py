@@ -16,7 +16,7 @@ class DataRef(object):
         '''Connect a callback to an event.'''
 
         self._root._bind(self.path, event, callback)
-        self._root._subscribe(self.path, callbacks={"onCancel": onCancel})
+        self._root._subscribe(self.path, self._get_query(), callbacks={"onCancel": onCancel})
 
     def set(self, data, onComplete=None):
         '''Write data to this Firebase location.'''
@@ -77,7 +77,7 @@ class DataRef(object):
             return None
 
     def __str__(self):
-        return self._root.url + self.path
+        return self._root.base_url + self.path
 
     def toString(self):
         '''Get the absolute URL corresponding to this Firebase reference's location.'''
@@ -159,17 +159,26 @@ class DataRef(object):
         ''' Return a query based on limit, startPoint, and endPoint. '''
 
         query = {}
+
         if self.query_limit != None:
             query['l'] = self.query_limit
+
         if self.query_start != None:
-            query['sp'] = self.query_start
+            if self.query_start['priority']:
+                query['sp'] = self.query_start['priority']
+            if self.query_start['name']:
+                query['sn'] = self.query_start['name']
+
         if self.query_end != None:
-            query['ep'] = self.query_end
+            if self.query_end['priority']:
+                query['ep'] = self.query_end['priority']
+            if self.query_end['name']:
+                query['en'] = self.query_end['name']
 
         if len(query.keys()) == 3:
             raise Exception("Query: Can't combine startAt(), endAt(), and limit().")
 
-        return query if query != {} else None
+        return [query] if query != {} else None
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
@@ -256,22 +265,14 @@ class RootDataRef(DataRef):
         message['d']['r'] = len(self.history)
         self.connection.send(message)
 
-    def _subscribe(self, path, callbacks=None):
+    def _subscribe(self, path, query, callbacks=None):
         '''Subscribe to updates regarding a path'''
 
-        query = self._get_query()
         isSubscribed = self._is_subscribed(path, query)
 
         # A subscription (listen) request takes two main arguments, p (path) and q (query). 
-        # The query has three optional parameters, sp (start point), ep (end point), and l (limit)
-        # However, due to the nature of Firebase, just because someone calls .startAt(100) doesn't mean
-        # subscribing with a {sp: 100} query is correct. A scenario exists where the user has already
-        # subscribed to a parent of this element meaning all updates to the child will be received
-        # regardless of their status regarding the query. In other words, we must implement our own
-        # query system client side, which evaluates all incoming children and triggers callbacks
-        # appropriately. Also, fyi, passing an empty query breaks everything.
-
         if not isSubscribed:
+
             message = {"t":"d", "d":{"r":0, "a":"l", "b":{"p":path}}}
 
             if not query is None:
@@ -296,10 +297,6 @@ class RootDataRef(DataRef):
 
     def _is_subscribed(self, path, query):
         '''Return True if already subscribed to this path or an ancestor.'''
-
-        # This method needs to take into account the scope of the query in relation
-        # to the scope of the subscribed query and not just assume an all or nothing
-        # subscription
 
         return any([s.split('/')==path.split('/')[:len(s.split('/'))] for s in self.subscriptions.keys()])
 

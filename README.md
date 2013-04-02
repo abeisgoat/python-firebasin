@@ -24,7 +24,10 @@ Compatible Method List
 * transaction( )		
 * on( )	
 * once( )		
-* off( )						
+* off( )
+* limit( )				
+* startAt( )			
+* endAt( )								
 
 **onDisconnect**
 * set( )				
@@ -47,10 +50,7 @@ Compatible Method List
 Incompatible Method List
 -----
 **Firebase**	
-* push( )									
-* limit( )				
-* startAt( )			
-* endAt( )				
+* push( )											
 
 **DataSnapshot**
 * ref( )				

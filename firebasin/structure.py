@@ -67,12 +67,17 @@ class Structure(dict):
             # If the path contains a . (i.e. it's meta data), just ignore it and don't call anything
             if not '.' in path: 
                 all_ancestors = self.ancestors(path)
-                parent = all_ancestors[0]
-                ancestors = all_ancestors[1:]
+
+                if len(all_ancestors):
+                    parent = all_ancestors[0]
+                    ancestors = all_ancestors[1:]
+                else:
+                    parent = None
+                    ancestors = []
 
                 if action == 'create':
                     self.trigger(path, 'value', data=value) 
-                    if value:
+                    if value and parent:
                         self.trigger(parent, 'child_added', data=value, snapshotPath=path)
 
                     for a in all_ancestors:
@@ -87,7 +92,9 @@ class Structure(dict):
                 if action == 'delete':
                     data = self.objectify(path)
                     self.trigger(path, 'value', data=data)
-                    self.trigger(parent, 'child_removed', data=data, snapshotPath=path)
+
+                    if parent:
+                        self.trigger(parent, 'child_removed', data=data, snapshotPath=path)
 
                     for a in all_ancestors:
                         self.trigger(a, 'value', data=self.objectify(a))
