@@ -15,7 +15,7 @@ if __name__ == '__main__':
     def onCancel(d): print 'On was canceled'
     def onComplete(d): print 'Set was completed', d
 
-    fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0MzQ0MzQ5LCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.YFJsFrhER3G-RVdC0_U8uwdYmUwdaM3eDANUAOXFhyc')
+    fb.auth('eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpYXQiOiAxMzY0ODkxNzUzLCAiZCI6IHsidXNlciI6ICJ0d2lsaW8iLCAicHJvdmlkZXIiOiAidG9rZW4ucHkifSwgInYiOiAwfQ.hXTZg95Rt2_1o1zYEH2s2S53UGLhklcC0lNYnENiSzY')
     sms = fb.child('sms')
     sms.on('child_added', child_added_sms, onCancel)
     sms.once('child_added', child_added_sms_once)

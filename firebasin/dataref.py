@@ -5,9 +5,12 @@ from debug import *
 class DataRef(object):
     '''Reference a specific location in a Firebase.'''
 
-    def __init__(self, root, path):
+    def __init__(self, root, path, startPoint=None, endPoint=None, limit=None):
         self._root = root
         self.path = '/' + '/'.join([p for p in path.split('/') if p])
+        self.query_start = startPoint
+        self.query_end = endPoint
+        self.query_limit = limit
 
     def on(self, event, callback, onCancel=None, context=None):
         '''Connect a callback to an event.'''
@@ -25,7 +28,7 @@ class DataRef(object):
         '''Write data like set, but also specify the priority for that data.'''
 
         data['.priority'] = priority
-        self.set(data, onComplete=on_complete)
+        self.set(data, onComplete=onComplete)
 
     def setPriority(self, priority, onComplete=None):
         '''Set a priority for the data at this Firebase location.'''
@@ -90,7 +93,7 @@ class DataRef(object):
     def remove(self, onComplete=None):
         '''Remove the data at this Firebase location.'''
 
-        self.set(None, onComplete=on_complete)
+        self.set(None, onComplete=onComplete)
 
     def off(self, event=None, callback=None, context=None):
         '''Detach a callback previously attached with on.'''
@@ -130,15 +133,43 @@ class DataRef(object):
     def push(self, value, onComplete=None): pass
     def transaction(self, updateFunction, onComplete=None): pass
 
-    # Query methods
-    def limit(self, limit): pass
-    def startAt(self, priority=None, name=None): pass
-    def endAt(self, priority=None, name=None): pass
+    def limit(self, limit):
+        '''Create a new Firebase object limited to the specified number of children.'''
+
+        return DataRef(self._root, self.path, endPoint=self.query_end, startPoint=self.query_start, limit=limit)
+
+    def startAt(self, priority=None, name=None): 
+        '''Create a Firebase with the specified starting point.'''
+
+        startPoint = {'priority': priority, 'name': name}
+        return DataRef(self._root, self.path, endPoint=self.query_end, startPoint=startPoint, limit=self.query_limit)
+
+    def endAt(self, priority=None, name=None): 
+        '''Create a Firebase with the specified ending point.'''
+
+        endPoint = {'priority': priority, 'name': name}
+        return DataRef(self._root, self.path, endPoint=endPoint, startPoint=self.query_start, limit=self.query_limit)
 
     def onDisconnect(self):
         ''' The onDisconnect class allows you to write or clear data when your client disconnects from the Firebase servers. '''
 
         return onDisconnect(self._root, self.path)
+
+    def _get_query(self):
+        ''' Return a query based on limit, startPoint, and endPoint. '''
+
+        query = {}
+        if self.query_limit != None:
+            query['l'] = self.query_limit
+        if self.query_start != None:
+            query['sp'] = self.query_start
+        if self.query_end != None:
+            query['ep'] = self.query_end
+
+        if len(query.keys()) == 3:
+            raise Exception("Query: Can't combine startAt(), endAt(), and limit().")
+
+        return query if query != {} else None
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
@@ -148,7 +179,7 @@ class RootDataRef(DataRef):
         self.connection = Connection(url, self)
         self.base_url = url
         self.structure = Structure()
-        self.subscriptions = []
+        self.subscriptions = {}
         self.history = []
         self.connection.start()
         DataRef.__init__(self, self, '')
@@ -228,11 +259,26 @@ class RootDataRef(DataRef):
     def _subscribe(self, path, callbacks=None):
         '''Subscribe to updates regarding a path'''
 
-        isSubscribed = any([s.split('/')==path.split('/')[:len(s.split('/'))] for s in self.subscriptions])
+        query = self._get_query()
+        isSubscribed = self._is_subscribed(path, query)
+
+        # A subscription (listen) request takes two main arguments, p (path) and q (query). 
+        # The query has three optional parameters, sp (start point), ep (end point), and l (limit)
+        # However, due to the nature of Firebase, just because someone calls .startAt(100) doesn't mean
+        # subscribing with a {sp: 100} query is correct. A scenario exists where the user has already
+        # subscribed to a parent of this element meaning all updates to the child will be received
+        # regardless of their status regarding the query. In other words, we must implement our own
+        # query system client side, which evaluates all incoming children and triggers callbacks
+        # appropriately. Also, fyi, passing an empty query breaks everything.
+
         if not isSubscribed:
             message = {"t":"d", "d":{"r":0, "a":"l", "b":{"p":path}}}
+
+            if not query is None:
+                message['d']['b']['q'] = query
+
             self._send(message, callbacks)
-            self.subscriptions.append(path)
+            self.subscriptions[path] = query
             return True
         else:
             # Should probably trigger callbacks['onComplete'] here
@@ -247,6 +293,15 @@ class RootDataRef(DataRef):
         events = structure_path.get(event_key, [])
         events.append(callback)
         self.structure[path][event_key] = events
+
+    def _is_subscribed(self, path, query):
+        '''Return True if already subscribed to this path or an ancestor.'''
+
+        # This method needs to take into account the scope of the query in relation
+        # to the scope of the subscribed query and not just assume an all or nothing
+        # subscription
+
+        return any([s.split('/')==path.split('/')[:len(s.split('/'))] for s in self.subscriptions.keys()])
 
 class onDisconnect(object):
     '''Allows writing or clearing of data regardless of quality of disconnect.'''
@@ -270,7 +325,7 @@ class onDisconnect(object):
             data = {".value": value}
 
         data['.priority'] = priority
-        self.set(data, onComplete=on_complete)
+        self.set(data, onComplete=onComplete)
 
     def update(self, value, onComplete=None):
         '''Similar to set, except this will overwrite only children enumerated in value when the client is disconnected.'''
@@ -281,7 +336,7 @@ class onDisconnect(object):
     def remove(self, onComplete=None): 
         '''Ensure the data at this location is deleted when the client is disconnected.'''
 
-        self.set(None, onComplete=on_complete)
+        self.set(None, onComplete=onComplete)
 
     def cancel(self, onComplete=None): 
         '''Cancel all previously queued onDisconnect() set or update events for this location and all children.'''
