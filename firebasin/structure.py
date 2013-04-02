@@ -41,25 +41,25 @@ class Structure(dict):
             elif '.data' in self[path] and self[path]['.data'] and path_data:
                 change = ['update', path, path_data]
                 self[path]['.data'] = path_data
-                for anscestor in self.ancestors(path):
-                    a = self.get(anscestor, {})
-                    a['.data'] = {}
-                    self[anscestor] = a
+                for ancestor_path in self.ancestors(path):
+                    ancestor = self.get(ancestor_path, {})
+                    ancestor['.data'] = {}
+                    self[ancestor_path] = ancestor
 
             else:
                 change = ['create', path, path_data]
-                for anscestor in self.ancestors(path):
-                    a = self.get(anscestor, {})
-                    a['.data'] = {}
-                    self[anscestor] = a
+                for ancestor_path in self.ancestors(path):
+                    ancestor = self.get(ancestor_path, {})
+                    ancestor['.data'] = {}
+                    self[ancestor_path] = ancestor
                 self[path]['.data'] = path_data
 
         else:
             change = ['create', path, path_data]
-            for anscestor in self.ancestors(path):
-                a = self.get(anscestor, {})
-                a['.data'] = {}
-                self[anscestor] = a
+            for ancestor_path in self.ancestors(path):
+                ancestor = self.get(ancestor_path, {})
+                ancestor['.data'] = {}
+                self[ancestor_path] = ancestor
             self[path] = {'.data': path_data}
 
         return change
@@ -67,66 +67,65 @@ class Structure(dict):
     def react(self, log):
         '''Call events based on a list of changes.'''
 
-        for action,path,value in sorted(log, key=lambda d: len(d[1])):
-            # If the path contains a . (i.e. it's meta data), just ignore it and don't call anything
+        for action, path, value in sorted(log, key=lambda d: len(d[1])):
+            # If the path contains a . (i.e. it's meta data), just ignore it 
+            # and don't call anything
             if not '.' in path: 
                 all_ancestors = self.ancestors(path)
 
                 if len(all_ancestors):
                     parent = all_ancestors[0]
-                    ancestors = all_ancestors[1:]
                 else:
                     parent = None
-                    ancestors = []
 
                 if action == 'create':
                     self.trigger(path, 'value', data=value) 
                     if value and parent:
-                        self.trigger(parent, 'child_added', data=value, snapshotPath=path)
+                        self.trigger(parent, 'child_added', data=value, snapshot_path=path)
 
-                    for a in all_ancestors:
-                        self.trigger(a, 'value', data=self.objectify(a))
+                    for ancestor in all_ancestors:
+                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
 
                 if action == 'update':
                     self.trigger(path, 'value', data=value)
-                    for a in all_ancestors:
-                        self.trigger(a, 'child_changed', data=value, snapshotPath=path)
-                        self.trigger(a, 'value', data=self.objectify(a))
+                    for ancestor in all_ancestors:
+                        self.trigger(ancestor, 'child_changed', data=value, snapshot_path=path)
+                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
 
                 if action == 'delete':
                     data = self.objectify(path)
                     self.trigger(path, 'value', data=data)
 
                     if parent:
-                        self.trigger(parent, 'child_removed', data=data, snapshotPath=path)
+                        self.trigger(parent, 'child_removed', data=data, snapshot_path=path)
 
-                    for a in all_ancestors:
-                        self.trigger(a, 'value', data=self.objectify(a))
+                    for ancestor in all_ancestors:
+                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
 
-    def trigger(self, path, event, data, snapshotPath=None):
+    def trigger(self, path, event, data, snapshot_path=None):
         '''Call all functions related to an event on path.'''
 
         event_key = '.event-'+event
 
-        if not snapshotPath:
-            snapshotPath = path
+        if snapshot_path is None:
+            snapshot_path = path
 
         if path in self:
             path_node = self[path]
             if path_node and event_key in path_node:
                 # If the "updated" data and the old data are the same, don't do anything
                 if data != path_node.get('.last-data'):
-                    if data==None:
+                    if data is None:
                         # If data is None, we pass the old data (for DELETE)
-                        snapshotData = path_node.get('.last-data')
+                        snapshot_data = path_node.get('.last-data')
                     else:
                         # Otherwise we just set last-data appropriately and set snapshotData to the new data
                         path_node['.last-data'] = data
-                        snapshotData = data
+                        snapshot_data = data
 
                     callbacks = path_node[event_key]
 
-                    obj = DataSnapshot(snapshotPath, snapshotData, self.root_ref)
+                    obj = DataSnapshot(snapshot_path, snapshot_data, self.root_ref)
 
                     for callback in callbacks:
                         callback(obj)
@@ -191,12 +190,12 @@ class Structure(dict):
         return children
 
     def ancestors(self, path):
-        '''Return all anscestors of a path.'''
+        '''Return all ancestors of a path.'''
 
         nodes = path.split('/')
         ancestors = []
-        for n in range(0, len(nodes)):
-            ancestors.append('/'.join(nodes[:-n]))
+        for node_position in range(0, len(nodes)):
+            ancestors.append('/'.join(nodes[:-node_position]))
         return [a for a in ancestors if a]
 
     def nodes(self, path):

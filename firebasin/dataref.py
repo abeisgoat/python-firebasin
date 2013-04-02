@@ -2,18 +2,18 @@ import datetime
 import math
 import random
 
-from connection import *
-from structure import *
-from debug import *
+from connection import Connection
+from structure import Structure
+from debug import debug
 
 class DataRef(object):
     '''Reference a specific location in a Firebase.'''
 
-    def __init__(self, root, path, startPoint=None, endPoint=None, limit=None):
+    def __init__(self, root, path, start_point=None, end_point=None, limit=None):
         self._root = root
         self.path = '/' + '/'.join([p for p in path.split('/') if p])
-        self.query_start = startPoint
-        self.query_end = endPoint
+        self.query_start = start_point
+        self.query_end = end_point
         self.query_limit = limit
 
     def on(self, event, callback, onCancel=None, context=None):
@@ -63,7 +63,7 @@ class DataRef(object):
     def unauth(self):
         '''Unauthenticates a Firebase client (i.e. logs out).'''
 
-        message = {"t":"d","d":{"r":0,"a":"unauth","b":{}}}
+        message = {"t":"d", "d":{"r":0, "a":"unauth", "b":{}}}
         self._root._send(message)
 
     def root(self): 
@@ -103,27 +103,27 @@ class DataRef(object):
         '''Detach a callback previously attached with on.'''
 
         node = self._root.structure.get(self.path, {})
-        eventSets = {}
+        event_sets = {}
 
         if event:
             event_key = '.event-' + event
-            eventSets[event_key] = node.get(event_key, [])
+            event_sets[event_key] = node.get(event_key, [])
         else:
             events = []
-            for key,value in node.items():
+            for key, value in node.items():
                 if key.startswith('.event-'):
-                    eventSets[key] = value
+                    event_sets[key] = value
 
-        for eventKey,eventSet in eventSets.items():
-            if callback and callback in eventSet:
-                eventSet.remove(callback)
+        for event_key, event_set in event_sets.items():
+            if callback and callback in event_set:
+                event_set.remove(callback)
             elif event:
-                for callback in eventSet:
-                    eventSet.remove(callback)
-            eventSets[eventKey] = eventSet
+                for callback in event_set:
+                    event_set.remove(callback)
+            event_sets[event_key] = event_set
 
-        for eventName,eventSet in eventSets.items():
-            node[eventName] = eventSet
+        for event_name, event_set in event_sets.items():
+            node[event_name] = event_set
 
     def once(self, event,  successCallback=None, failureCallback=None, context=None): 
         '''Listens for exactly one event of the specified event type, and then stops listening.'''
@@ -150,19 +150,19 @@ class DataRef(object):
     def limit(self, limit):
         '''Create a new Firebase object limited to the specified number of children.'''
 
-        return DataRef(self._root, self.path, endPoint=self.query_end, startPoint=self.query_start, limit=limit)
+        return DataRef(self._root, self.path, end_point=self.query_end, start_point=self.query_start, limit=limit)
 
     def startAt(self, priority=None, name=None): 
         '''Create a Firebase with the specified starting point.'''
 
-        startPoint = {'priority': priority, 'name': name}
-        return DataRef(self._root, self.path, endPoint=self.query_end, startPoint=startPoint, limit=self.query_limit)
+        start_point = {'priority': priority, 'name': name}
+        return DataRef(self._root, self.path, end_point=self.query_end, start_point=start_point, limit=self.query_limit)
 
     def endAt(self, priority=None, name=None): 
         '''Create a Firebase with the specified ending point.'''
 
-        endPoint = {'priority': priority, 'name': name}
-        return DataRef(self._root, self.path, endPoint=endPoint, startPoint=self.query_start, limit=self.query_limit)
+        end_point = {'priority': priority, 'name': name}
+        return DataRef(self._root, self.path, end_point=end_point, start_point=self.query_start, limit=self.query_limit)
 
     def onDisconnect(self):
         ''' The onDisconnect class allows you to write or clear data when your client disconnects from the Firebase servers. '''
@@ -170,7 +170,7 @@ class DataRef(object):
         return onDisconnect(self._root, self.path)
 
     def _get_query(self):
-        ''' Return a query based on limit, startPoint, and endPoint. '''
+        ''' Return a query based on limit, start_point, and end_point. '''
 
         query = {}
 
@@ -197,26 +197,24 @@ class DataRef(object):
     def _get_push_id(self):
         ''' Return a new string containing an ID for pushing. '''
 
-        # This is the only method interpreted directly from the Javascript SDK
         now = datetime.datetime.now()
-        a = int(now.strftime('%s%f')[:-3])
+        timestamp = int(now.strftime('%s%f')[:-3])
 
         characters = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
-        c = [0 for p in range(0, 8)]
-        p = []
+        push_id = ""
 
-        for d in reversed(range(0, 8)):
-            c[d] = characters[int(a) % 64]
-            a = math.floor(a / 64)
+        for step in range(0, 8):
+            push_id += characters[int(timestamp) % 64]
+            timestamp = math.floor(timestamp / 64)
 
-        a = "".join(c)
+        push_id = push_id[::-1]
 
-        for d in range(0, 12):
+        for step in range(0, 12):
             num = random.randint(0, 63)
-            a += characters[num]
+            push_id += characters[num]
 
-        return a
+        return push_id
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
@@ -247,15 +245,14 @@ class RootDataRef(DataRef):
                 historical_entry = self.history[data['r']-1]
                 request = historical_entry['message']
                 callbacks = historical_entry['callbacks']
-                b = data['b'] # B is where the majority of data relavant to the request is stored
-                error = b['s']
+                error = data['b']['s']
     
                 if error != 'ok':
                     if error == 'permission_denied':
                         path = request['d']['b']['p']
                         print 'FIREBASE WARNING: on() or once() for %s failed: %s' % (path, error)
 
-                    elif error == 'expired_token' or error =='invalid_token':
+                    elif error == 'expired_token' or error == 'invalid_token':
                         print 'FIREBASE WARNING: auth() failed: %s' % (error)
 
                     else:
@@ -276,9 +273,9 @@ class RootDataRef(DataRef):
 
             # If a is in data, it's a new data blob for a node, maybe
             elif 'a' in data:
-                b = data['b']
-                path = b['p']
-                path_data = b['d']
+                b_data = data['b']
+                path = b_data['p']
+                path_data = b_data['d']
                 
                 self._store(path, path_data)
 
