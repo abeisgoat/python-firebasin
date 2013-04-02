@@ -13,13 +13,13 @@ class DataRef(object):
         '''Connect a callback to an event.'''
 
         self._root._bind(self.path, event, callback)
-        self._root._subscribe(self.path)
+        self._root._subscribe(self.path, callbacks={"onCancel": onCancel})
 
     def set(self, data, onComplete=None):
         '''Write data to this Firebase location.'''
 
         message = {"t":"d", "d":{"r":0, "a":"p", "b":{"p":self.path, "d":data }}}
-        self._root._send(message)
+        self._root._send(message, {'onComplete': onComplete})
 
     def setWithPriority(self, data, priority, onComplete=None):
         '''Write data like set, but also specify the priority for that data.'''
@@ -51,7 +51,7 @@ class DataRef(object):
         '''Send an authentication token.'''
 
         message = {"t":"d", "d":{"r":0, "a":"auth", "b":{"cred":auth_token}}}
-        self._root._send(message)
+        self._root._send(message, {'onComplete': onComplete, 'onCancel': onCancel})
 
     def unauth(self):
         '''Unauthenticates a Firebase client (i.e. logs out).'''
@@ -85,10 +85,11 @@ class DataRef(object):
         '''Similar to set, except this will overwrite only children enumerated in value.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'m', 'b':{'p':self.path, 'd':value}}}
-        self._root._send(message)
+        self._root._send(message, {'onComplete': onComplete})
 
     def remove(self, onComplete=None):
         '''Remove the data at this Firebase location.'''
+
         self.set(None, onComplete=on_complete)
 
     def off(self, event=None, callback=None, context=None):
@@ -119,7 +120,12 @@ class DataRef(object):
 
     def once(self, event,  successCallback=None, failureCallback=None, context=None): 
         '''Listens for exactly one event of the specified event type, and then stops listening.'''
-        pass
+
+        def once_wrapper(*args, **kwargs):
+            successCallback(*args, **kwargs)
+            self.off(event, once_wrapper)
+
+        self.on(event, once_wrapper)
 
     def push(self, value, onComplete=None): pass
     def transaction(self, updateFunction, onComplete=None): pass
@@ -131,6 +137,7 @@ class DataRef(object):
 
     def onDisconnect(self):
         ''' The onDisconnect class allows you to write or clear data when your client disconnects from the Firebase servers. '''
+
         return onDisconnect(self._root, self.path)
 
 class RootDataRef(DataRef):
@@ -142,7 +149,7 @@ class RootDataRef(DataRef):
         self.base_url = url
         self.structure = Structure()
         self.subscriptions = []
-        self.callbacks = []
+        self.history = []
         self.connection.start()
         DataRef.__init__(self, self, '')
 
@@ -159,12 +166,31 @@ class RootDataRef(DataRef):
             # If r is in data and set to 1 then it's probably a response 
             # to something we sent like a sub request or an auth token
             if 'r' in data:
-                debug(self.callbacks[data['r']-1])
+                historical_entry = self.history[data['r']-1]
+                request = historical_entry['message']
+                callbacks = historical_entry['callbacks']
                 b = data['b'] # B is where the majority of data relavant to the request is stored
-                if b['s'] == 'invalid_token':
-                    pass
-                if b['s'] == 'permission_denied':
-                    pass
+                error = b['s']
+    
+                if error != 'ok':
+                    if error == 'permission_denied':
+                        path = request['d']['b']['p']
+                        print 'FIREBASE WARNING: on() or once() for %s failed: %s' % (path, error)
+
+                    elif error == 'expired_token' or error =='invalid_token':
+                        print 'FIREBASE WARNING: auth() failed: %s' % (error)
+
+                    else:
+                        path = request['d']['b']['p']
+                        print 'FIREBASE WARNING: unknown for %s failed: %s' % (path, error)
+
+                    onCancel = callbacks.get('onCancel', None)
+                    if not onCancel is None:
+                        onCancel(error)
+
+                onComplete = callbacks.get('onComplete', None)
+                if not onComplete is None:
+                    onComplete(error if error != 'ok' else None)
 
             # If t is in data then it's the response to the initial connection, maybe
             elif 't' in data:
@@ -187,23 +213,29 @@ class RootDataRef(DataRef):
 
         self.structure.store(path, path_data)
 
-    def _send(self, message):
+    def _send(self, message, callbacks=None):
         '''Send a single message to Firebase.'''
 
-        self.callbacks.append(message)
-        message['d']['r'] = len(self.callbacks)
+        historical_entry = {
+            'message': message,
+            'callbacks': {} if callbacks is None else callbacks
+        }
+
+        self.history.append(historical_entry)
+        message['d']['r'] = len(self.history)
         self.connection.send(message)
 
-    def _subscribe(self, path):
+    def _subscribe(self, path, callbacks=None):
         '''Subscribe to updates regarding a path'''
 
         isSubscribed = any([s.split('/')==path.split('/')[:len(s.split('/'))] for s in self.subscriptions])
         if not isSubscribed:
             message = {"t":"d", "d":{"r":0, "a":"l", "b":{"p":path}}}
-            self._send(message)
+            self._send(message, callbacks)
             self.subscriptions.append(path)
             return True
         else:
+            # Should probably trigger callbacks['onComplete'] here
             return False
 
     def _bind(self, path, event, callback):
@@ -227,7 +259,7 @@ class onDisconnect(object):
         '''Ensure the data at this location is set to the specified value when the client is disconnected.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'o', 'b':{'p':self.path, 'd':value}}}
-        self._root._send(message)
+        self._root._send(message, {"onComplete": onComplete})
 
     def setWithPriority(self, value, priority, onComplete=None):
         '''Ensure the data at this location is set to the specified value and priority when the client is disconnected.'''
@@ -244,7 +276,7 @@ class onDisconnect(object):
         '''Similar to set, except this will overwrite only children enumerated in value when the client is disconnected.'''
 
         message = {'t':'d', 'd':{'r':0, 'a':'om', 'b':{'p':self.path, 'd':value}}}
-        self._root._send(message)
+        self._root._send(message, {"onComplete": onComplete})
 
     def remove(self, onComplete=None): 
         '''Ensure the data at this location is deleted when the client is disconnected.'''
@@ -255,4 +287,4 @@ class onDisconnect(object):
         '''Cancel all previously queued onDisconnect() set or update events for this location and all children.'''
 
         message = {"t":"d", "d":{"r":0, "a":"oc", "b":{"p":self.path, "d":None}}}
-        self._root._send(message)
+        self._root._send(message, {"onComplete": onComplete})

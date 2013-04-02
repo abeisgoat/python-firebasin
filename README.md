@@ -18,12 +18,12 @@ Compatible Method List
 * toString( )			
 * set( )				
 * update( )				
-* remove( )				
-* push( )				
+* remove( )							
 * setWithPriority( )	
 * setPriority( )		
 * transaction( )		
 * on( )	
+* once( )		
 * off( )						
 
 **onDisconnect**
@@ -46,8 +46,8 @@ Compatible Method List
 
 Incompatible Method List
 -----
-**Firebase**							
-* once( )				
+**Firebase**	
+* push( )									
 * limit( )				
 * startAt( )			
 * endAt( )				

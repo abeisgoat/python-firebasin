@@ -1,3 +1,5 @@
+from datasnapshot import *
+
 class Structure(dict):
     '''Hold data related to paths in an organized way.'''
 
@@ -8,7 +10,7 @@ class Structure(dict):
         def recursive(path, path_data):
             if type(path_data) == type(dict()) and path_data: 
                 for node in path_data:
-                    node_path = os.path.join(path, node)
+                    node_path = path + '/' + node
                     node_data = path_data[node]
 
                     change = self.store_one(node_path, node_data)
@@ -137,7 +139,7 @@ class Structure(dict):
                 return data
 
             for key in children_last_nodes:
-                kpath = os.path.join(rpath, key)
+                kpath = rpath + '/' + key
                 kpath_node = self[kpath]
                 if '.data' in kpath_node:
                     kpath_data = kpath_node['.data']
