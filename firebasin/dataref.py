@@ -1,6 +1,7 @@
 import datetime
 import math
 import random
+import time
 
 from connection import Connection
 from structure import Structure
@@ -198,6 +199,9 @@ class DataRef(object):
         ''' Return a new string containing an ID for pushing. '''
 
         now = datetime.datetime.now()
+        # This method has issues with consistancy between Windows & Linux
+        # I use an inconsistent "%s" for strftime need to find a better solution
+        # The goal here is for the timestamp to be the milleseconds since 1970
         timestamp = int(now.strftime('%s%f')[:-3])
 
         characters = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
@@ -215,6 +219,15 @@ class DataRef(object):
             push_id += characters[num]
 
         return push_id
+
+    def waitForInterrupt(self):
+        ''' Ensure that KeyboardInterrupts are not ignored and that the Firebase exits. '''
+
+        try:
+            while 1: 
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.connection.stopped = True
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
