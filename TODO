@@ -1,4 +1,4 @@
-* Fix querys breaking when you subscribe to a parent with a consuming query
-* Ensure that all callbacks like onComplete, onCancel, onSuccess, and onFailure work (I know that last two aren't implemented yet)
+* Fix querys breaking when you subscribe to a parent with a consuming querys and ensure child_removed is triggered when needed
 * Implemented transaction( )
+* Implement the context parameter on all applicable methods
 * Write formal tests!

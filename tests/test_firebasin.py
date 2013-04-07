@@ -62,9 +62,9 @@ sms.child("test").off('value')
 
 # Querying half works, when your supply a query with a larger scope (ie a "value" bind to a parent)
 # it breaks because we're not filtering incoming results.
-sms.startAt(None, '-Ip_SsFU5LY_63gH07x2').limit(3).on('child_added', say_body)
+#sms.startAt(None, '-Ip_SsFU5LY_63gH07x2').limit(3).on('child_added', say_body)
 sms.child('-Ip_SxEZ-ZG7Q1yfPiuf').on('value', say_specific)
 
-# This thing here is important to interupt the threaded socket when a 
-# keyboard interupt is received
+# This is important to interupt the threaded socket when a 
+# keyboard interupt is received, it allows us to shut down gracefully
 flame.waitForInterrupt()

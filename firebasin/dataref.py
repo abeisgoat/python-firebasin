@@ -130,10 +130,13 @@ class DataRef(object):
         '''Listens for exactly one event of the specified event type, and then stops listening.'''
 
         def once_wrapper(*args, **kwargs):
+            '''Call a callback then trigger off on itself'''
+
             successCallback(*args, **kwargs)
             self.off(event, once_wrapper)
 
-        self.on(event, once_wrapper)
+        self._root._bind(self.path, event, once_wrapper)
+        self._root._subscribe(self.path, self._get_query(), callbacks={"onCancel": failureCallback})
 
     def push(self, value, onComplete=None):
         '''Generate a new child location using a unique name and returns a Firebase reference to it.'''
@@ -246,7 +249,6 @@ class RootDataRef(DataRef):
         '''Process a single incoming message'''
 
         # This whole thing needs to be rewritten to use all the new information about the protocol
-        # and to trigger callbacks based on success, failure, and cancel
         debug(message)
 
         # If message type is data
@@ -286,9 +288,15 @@ class RootDataRef(DataRef):
 
             # If a is in data, it's a new data blob for a node, maybe
             elif 'a' in data:
-                b_data = data['b']
-                path = b_data['p']
-                path_data = b_data['d']
+                if data['a'] == 'c':
+                    # This type of message is created when we lose permission to read
+                    # and it requires some extra effort to implement as we call onCancel
+                    # for all effected callbacks, which are any anscestors of the path
+                    pass
+                else:
+                    b_data = data['b']
+                    path = b_data['p']
+                    path_data = b_data['d']
                 
                 self._store(path, path_data)
 
