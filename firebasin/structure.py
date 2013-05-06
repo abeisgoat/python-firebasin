@@ -150,7 +150,7 @@ class Structure(dict):
 
             for key in children_last_nodes:
                 kpath = rpath + '/' + key
-                kpath_node = self[kpath]
+                kpath_node = self.get(kpath, {})
                 if '.data' in kpath_node:
                     kpath_data = kpath_node['.data']
                     if kpath_data or kpath_data == {}:
