@@ -232,6 +232,11 @@ class DataRef(object):
         except KeyboardInterrupt:
             self.connection.stopped = True
 
+    def close(self):
+        ''' Closes any open sockets and exits. '''
+        
+        self.connection.stopped = True
+
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
 
