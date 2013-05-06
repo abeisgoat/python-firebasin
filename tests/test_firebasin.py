@@ -21,6 +21,7 @@ testdata = {
 
 from firebasin import Firebase
 flame = Firebase(FIREBASE_URL)
+flame.set(testdata)
 
 def on_child_added(snapshot):  
     print str(snapshot.name()) + ' < child_added to /test_child_added/'
