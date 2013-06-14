@@ -235,7 +235,7 @@ class DataRef(object):
     def close(self):
         ''' Closes any open sockets and exits. '''
         
-        self.connection.stopped = True
+        self._root.connection.stopped = True
 
 class RootDataRef(DataRef):
     '''A reference to a root of a Firbase.'''
