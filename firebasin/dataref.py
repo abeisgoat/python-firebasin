@@ -230,7 +230,7 @@ class DataRef(object):
             while 1: 
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.connection.stopped = True
+            self._root.connection.stopped = True
 
     def close(self):
         ''' Closes any open sockets and exits. '''
