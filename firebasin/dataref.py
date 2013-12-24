@@ -1,3 +1,4 @@
+import atexit
 import datetime
 import math
 import random
@@ -247,7 +248,9 @@ class RootDataRef(DataRef):
         self.structure = Structure(self)
         self.subscriptions = {}
         self.history = []
+        self.connection.daemon = True
         self.connection.start()
+        atexit.register(self.close)
         DataRef.__init__(self, self, '')
 
     def _process(self, message):
