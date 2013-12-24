@@ -13,7 +13,7 @@ class Connection(threading.Thread):
 
         self.parsed_url = self.parse_url(url)
         self._root = root
-        self.outgoing_quene = []
+        self.outgoing_queue = []
         self.url = None
         self.handshake = None
         self.data = None
@@ -72,16 +72,16 @@ class Connection(threading.Thread):
         self.data.close()
 
     def send_outgoing(self):
-        '''Send all quened outgoing messages to Firebase.'''
+        '''Send all queued outgoing messages to Firebase.'''
 
-        for message in self.outgoing_quene:
+        for message in self.outgoing_queue:
             self.data.send(json.dumps(message))
 
     def send(self, message):
-        '''Send or quene a single message to a Firebase.'''
+        '''Send or queue a single message to a Firebase.'''
 
         if not self.connected:
-            self.outgoing_quene.append(message)
+            self.outgoing_queue.append(message)
         else:
             self.data.send(message)
 
