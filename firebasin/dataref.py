@@ -1,3 +1,4 @@
+import atexit
 import datetime
 import math
 import random
@@ -247,7 +248,9 @@ class RootDataRef(DataRef):
         self.structure = Structure(self)
         self.subscriptions = {}
         self.history = []
+        self.connection.daemon = True
         self.connection.start()
+        atexit.register(self.close)
         DataRef.__init__(self, self, '')
 
     def _process(self, message):
@@ -311,7 +314,8 @@ class RootDataRef(DataRef):
 
     def _store(self, path, path_data):
         '''Store a single path worth of data into the strucutre.'''
-
+        if path != "/":
+            path = "/%s" % path
         self.structure.store(path, path_data)
 
     def _send(self, message, callbacks=None):
