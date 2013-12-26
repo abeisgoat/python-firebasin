@@ -84,7 +84,7 @@ class Connection(threading.Thread):
         if not self.connected:
             self.outgoing_queue.append(message)
         else:
-            self.data.send(message)
+            self.data.send(json.dumps(message))
 
     def parse_url(self, url):
         '''Parse a URL.'''
