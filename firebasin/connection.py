@@ -54,6 +54,7 @@ class Connection(threading.Thread):
             self.connected = True
 
         def on_received(o):
+            self.connected = True
             self._root._process(o)
 
         def on_closed(data):
