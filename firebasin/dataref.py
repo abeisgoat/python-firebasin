@@ -1,5 +1,4 @@
 import atexit
-import datetime
 import math
 import random
 import time
@@ -202,11 +201,8 @@ class DataRef(object):
     def _get_push_id(self):
         ''' Return a new string containing an ID for pushing. '''
 
-        now = datetime.datetime.now()
-        # This method has issues with consistancy between Windows & Linux
-        # I use an inconsistent "%s" for strftime need to find a better solution
-        # The goal here is for the timestamp to be the milleseconds since 1970
-        timestamp = int(now.strftime('%s%f')[:-3])
+        now = time.time()
+        timestamp = int(now * 1000)
 
         characters = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
@@ -305,8 +301,7 @@ class RootDataRef(DataRef):
                     b_data = data['b']
                     path = b_data['p']
                     path_data = b_data['d']
-                
-                self._store(path, path_data)
+                    self._store(path, path_data)
 
         # If message type is... control?
         if message['t'] == 'c':
