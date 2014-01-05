@@ -2,6 +2,7 @@ import atexit
 import math
 import random
 import time
+import datetime
 
 from connection import Connection
 from structure import Structure
@@ -201,8 +202,13 @@ class DataRef(object):
     def _get_push_id(self):
         ''' Return a new string containing an ID for pushing. '''
 
-        now = time.time()
-        timestamp = int(now * 1000)
+        now = datetime.datetime.now()
+
+        try:
+            timestamp = int(now.strftime('%s%f')[:-3])
+        except ValueError:
+            now = time.time()
+            timestamp = int(now * 1000)
 
         characters = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 
