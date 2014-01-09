@@ -315,7 +315,7 @@ class RootDataRef(DataRef):
 
     def _store(self, path, path_data):
         '''Store a single path worth of data into the strucutre.'''
-        if path != "/":
+        if not path or path[0] != "/":
             path = "/%s" % path
         self.structure.store(path, path_data)
 

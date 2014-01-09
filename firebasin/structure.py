@@ -149,7 +149,12 @@ class Structure(dict):
                 return data
 
             for key in children_last_nodes:
-                kpath = rpath + '/' + key
+
+                if (rpath != "/"):
+                    kpath = rpath + '/' + key
+                else:
+                    kpath = '/' + key
+                   
                 kpath_node = self.get(kpath, {})
                 if '.data' in kpath_node:
                     kpath_data = kpath_node['.data']
