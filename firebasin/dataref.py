@@ -76,7 +76,7 @@ class DataRef(object):
     def name(self):
         '''Get the last node (name) of this Firebase location.'''
 
-        last_node = [p for p in self.path.split('/') if p][:-1]
+        last_node = [p for p in self.path.split('/') if p][-1:]
         if last_node:
             return last_node
         else:
