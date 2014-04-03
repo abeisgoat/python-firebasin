@@ -3,6 +3,7 @@ import math
 import random
 import time
 import datetime
+from threading import Timer
 
 from connection import Connection
 from structure import Structure
@@ -252,6 +253,7 @@ class RootDataRef(DataRef):
         self.history = []
         self.connection.daemon = True
         self.connection.start()
+        self._keep_alive()
         atexit.register(self.close)
         DataRef.__init__(self, self, '')
 
@@ -350,6 +352,15 @@ class RootDataRef(DataRef):
         else:
             # Should probably trigger callbacks['onComplete'] here
             return False
+
+    def _keep_alive(self):
+        '''Send a keep-alive packet to Firebase'''
+
+        def send():
+            self._send({"t":"d", "d":{"r":0}})
+            Timer(60.0, send).start()
+
+        Timer(60.0, send).start() 
 
     def _bind(self, path, event, callback):
         '''Bind a single callback to an event on a path'''

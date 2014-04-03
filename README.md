@@ -54,5 +54,5 @@ Incompatible/Incomplete Method List
 * limit( )
 * startAt( )
 * endAt( )	
-
-			
+* goOffline( )
+* goOnline( )
