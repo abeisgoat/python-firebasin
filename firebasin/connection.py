@@ -120,12 +120,12 @@ class DataClient(WebSocketClient):
         if str(m).isdigit(): #Number, telling how many 16kb chunks to expect
             self.partialdatanumber = int(str(m))
             return;
-        if (self.partialdatanumber > 1 and len(self.partialdata) < self.partialdatanumber): #Check to see if we're expecing multiple chunks
+        if self.partialdatanumber > 1 and len(self.partialdata) < self.partialdatanumber: #Check to see if we're expecing multiple chunks
             self.partialdata.append(str(m))
             if len(self.partialdata) == self.partialdatanumber: 
-                m = str.join('',self.partialdata) 
-                self.partialdatanumber=1
-                self.partialdata=[]
+                m = str.join('', self.partialdata) 
+                self.partialdatanumber = 1
+                self.partialdata = []
             else:
                 return
         obj = json.loads(str(m))
