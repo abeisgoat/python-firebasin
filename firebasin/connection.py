@@ -116,6 +116,7 @@ class DataClient(WebSocketClient):
 
     def received_message(self, m):
         '''Store received message and call on_received.'''
+
         if str(m).isdigit(): #Number, telling how many 16kb chunks to expect
             self.partialdatanumber = int(str(m))
             return;
