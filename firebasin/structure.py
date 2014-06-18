@@ -1,4 +1,5 @@
 from datasnapshot import *
+from Queue import LifoQueue
 
 class Structure(dict):
     '''Hold data related to paths in an organized way.'''
@@ -11,21 +12,27 @@ class Structure(dict):
         '''Store a dict recursively as paths.'''
 
         changes = []
-        def recursive(path, path_data):
-            if type(path_data) == type(dict()) and path_data: 
-                for node in path_data:
-                    node_path = path + '/' + node
-                    node_data = path_data[node]
+        def iterative(path, path_data):
+            stack=LifoQueue()
+            while 1:
+                if not (type(path_data) == dict and path_data):
+                    changes.append(self.store_one(path, path_data))
+                else:
+                    for node in path_data:
+                        node_path = path + '/' + node
+                        node_data = path_data[node]
+    
+                        change = self.store_one(node_path, node_data)
+                        changes.append(change)
+    
+                        if type(node_data) == type(dict()):
+                            stack.put([node_path, node_data])
+                if stack.qsize():
+                    path,path_data=stack.get()
+                    continue;
+                break;
 
-                    change = self.store_one(node_path, node_data)
-                    changes.append(change)
-
-                    if type(node_data) == type(dict()):
-                        recursive(node_path, node_data)
-            else:
-                changes.append(self.store_one(path, path_data))
-
-        recursive(root_path, root_path_data)
+        iterative(root_path, root_path_data)
         self.react(changes)
         return True
 
