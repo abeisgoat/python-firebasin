@@ -1,4 +1,5 @@
 from datasnapshot import *
+from Queue import LifoQueue
 
 class Structure(dict):
     '''Hold data related to paths in an organized way.'''
@@ -11,21 +12,27 @@ class Structure(dict):
         '''Store a dict recursively as paths.'''
 
         changes = []
-        def recursive(path, path_data):
-            if type(path_data) == type(dict()) and path_data: 
-                for node in path_data:
-                    node_path = path + '/' + node
-                    node_data = path_data[node]
+        def iterative(path, path_data):
+            stack=LifoQueue()
+            while 1:
+                if not (type(path_data) == dict and path_data):
+                    changes.append(self.store_one(path, path_data))
+                else:
+                    for node in path_data:
+                        node_path = path + '/' + node
+                        node_data = path_data[node]
+    
+                        change = self.store_one(node_path, node_data)
+                        changes.append(change)
+    
+                        if type(node_data) == type(dict()):
+                            stack.put([node_path, node_data])
+                if stack.qsize():
+                    path,path_data=stack.get()
+                    continue;
+                break;
 
-                    change = self.store_one(node_path, node_data)
-                    changes.append(change)
-
-                    if type(node_data) == type(dict()):
-                        recursive(node_path, node_data)
-            else:
-                changes.append(self.store_one(path, path_data))
-
-        recursive(root_path, root_path_data)
+        iterative(root_path, root_path_data)
         self.react(changes)
         return True
 
@@ -67,6 +74,7 @@ class Structure(dict):
     def react(self, log):
         '''Call events based on a list of changes.'''
 
+        ancestors = set()
         for action, path, value in sorted(log, key=lambda d: len(d[1])):
             # If the path contains a . (i.e. it's meta data), just ignore it 
             # and don't call anything
@@ -83,14 +91,14 @@ class Structure(dict):
                     if value and parent:
                         self.trigger(parent, 'child_added', data=value, snapshot_path=path)
 
-                    for ancestor in all_ancestors:
-                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
+                    ancestors.update(all_ancestors)
 
                 if action == 'update':
                     self.trigger(path, 'value', data=value)
                     for ancestor in all_ancestors:
                         self.trigger(ancestor, 'child_changed', data=value, snapshot_path=path)
-                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
+
+                    ancestors.update(all_ancestors)
 
                 if action == 'delete':
                     data = self.objectify(path)
@@ -99,8 +107,10 @@ class Structure(dict):
                     if parent:
                         self.trigger(parent, 'child_removed', data=data, snapshot_path=path)
 
-                    for ancestor in all_ancestors:
-                        self.trigger(ancestor, 'value', data=self.objectify(ancestor))
+                    ancestors.update(all_ancestors)
+
+        for ancestor in ancestors:
+            self.trigger(ancestor, 'value', data=self.objectify(ancestor))
 
     def trigger(self, path, event, data, snapshot_path=None):
         '''Call all functions related to an event on path.'''

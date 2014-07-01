@@ -97,6 +97,8 @@ class DataClient(WebSocketClient):
     def __init__(self, url):
         WebSocketClient.__init__(self, url)
         self.data = []
+        self.partialdata = []
+        self.partialdatanumber = 1
 
     def opened(self):
         '''Call callback on_opened'''
@@ -115,6 +117,17 @@ class DataClient(WebSocketClient):
     def received_message(self, m):
         '''Store received message and call on_received.'''
 
+        if str(m).isdigit(): #Number, telling how many 16kb chunks to expect
+            self.partialdatanumber = int(str(m))
+            return;
+        if self.partialdatanumber > 1 and len(self.partialdata) < self.partialdatanumber: #Check to see if we're expecing multiple chunks
+            self.partialdata.append(str(m))
+            if len(self.partialdata) == self.partialdatanumber: 
+                m = str.join('', self.partialdata) 
+                self.partialdatanumber = 1
+                self.partialdata = []
+            else:
+                return
         obj = json.loads(str(m))
         self.data.append(obj)
         if 'on_received' in dir(self):
