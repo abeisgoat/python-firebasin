@@ -95,7 +95,7 @@ class DataClient(WebSocketClient):
     '''Connect to a web socket.'''
 
     def __init__(self, url):
-        WebSocketClient.__init__(self, url)
+        WebSocketClient.__init__(self, url, ssl_options={'ssl_version': ssl.PROTOCOL_TLSv1})
         self.data = []
         self.partialdata = []
         self.partialdatanumber = 1
