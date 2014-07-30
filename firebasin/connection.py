@@ -3,6 +3,11 @@ import threading
 import time
 import json
 
+try:
+    import ssl
+except:
+    ssl = False
+
 from debug import debug
 
 class Connection(threading.Thread):
@@ -95,7 +100,10 @@ class DataClient(WebSocketClient):
     '''Connect to a web socket.'''
 
     def __init__(self, url):
-        WebSocketClient.__init__(self, url, ssl_options={'ssl_version': ssl.PROTOCOL_TLSv1})
+        if ssl:
+            WebSocketClient.__init__(self, url, ssl_options={'ssl_version': ssl.PROTOCOL_TLSv1})
+        else:
+            WebSocketClient.__init__(self, url)
         self.data = []
         self.partialdata = []
         self.partialdatanumber = 1
