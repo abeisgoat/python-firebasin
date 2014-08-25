@@ -10,8 +10,14 @@ class Structure(dict):
 
     def store(self, root_path, root_path_data):
         '''Store a dict recursively as paths.'''
-
-        changes = []
+        p = root_path.split('/')
+        if p[-1] in self:
+            if root_path_data is None:
+                changes = [['delete', root_path, None]]
+            else:
+                changes = []
+        else:
+            changes=[['create',root_path, root_path_data]]
         def iterative(path, path_data):
             stack=LifoQueue()
             while 1:
