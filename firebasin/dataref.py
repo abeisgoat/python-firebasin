@@ -355,13 +355,9 @@ class RootDataRef(DataRef):
 
     def _keep_alive(self):
         '''Send a keep-alive packet to Firebase'''
-
-        def send():
-            Heartbeat(self.connection.data, 2).start()
-        #    Timer(60.0, send).start()
-
-        Timer(60.0, send).start()
         from ws4py.websocket import Heartbeat
+        Timer(10.0, lambda: Heartbeat(self.connection.data, 2).start()).start()
+
 
 
     def _bind(self, path, event, callback):
