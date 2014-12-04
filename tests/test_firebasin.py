@@ -19,7 +19,7 @@ testdata = {
 
 from firebasin import Firebase
 
-FIREBASE_URL = 'https://publicdata-cryptocurrency.firebaseio.com/dogecoin'
+FIREBASE_URL = 'https://publicdata-cryptocurrency.firebaseio.com/bitcoin'
 
 server = Firebase(FIREBASE_URL)
 
