@@ -9,6 +9,8 @@ from connection import Connection
 from structure import Structure
 from debug import debug
 
+from ws4py.websocket import Heartbeat
+
 class DataRef(object):
     '''Reference a specific location in a Firebase.'''
 
@@ -356,11 +358,7 @@ class RootDataRef(DataRef):
     def _keep_alive(self):
         '''Send a keep-alive packet to Firebase'''
 
-        def send():
-            self._send({"t":"d", "d":{"r":0}})
-            Timer(60.0, send).start()
-
-        Timer(60.0, send).start() 
+        Timer(10.0, lambda: Heartbeat(self.connection.data, 2).start()).start()
 
     def _bind(self, path, event, callback):
         '''Bind a single callback to an event on a path'''

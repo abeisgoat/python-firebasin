@@ -1,5 +1,4 @@
 from ws4py.client.threadedclient import WebSocketClient
-from ws4py.websocket import Heartbeat
 import threading
 import time
 import json
@@ -42,6 +41,7 @@ class Connection(threading.Thread):
         while not self.url:
             time.sleep(0.1)
 
+        # Once we have the url connect
         self.connect()
 
     def connect(self):
@@ -56,7 +56,6 @@ class Connection(threading.Thread):
         self.data.on_opened = self.send_outgoing
 
         def on_connected():
-            Heartbeat(self.data,2).start()
             self.connected = True
 
         def on_received(o):
