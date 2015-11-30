@@ -1,6 +1,8 @@
 Python Firebasin 0.1
 ====================
 
+# This project is no longer supported and should not be used in production.
+
 *Please note: All "compatible" methods have been tested as functional, but not extensively. There is limited functionality for query related methods.*
 
 Firebasin is a reimplementation of the [Firebase Javascript SDK](https://www.firebase.com/docs/javascript/firebase/index.html) in pure Python. Firebasin aims to have an interface identical to the Javascript SDK. As such, the Firebase Javascript docs can be used as temporary docs for Firebasin as the interface is identical. However, it should be noted that the implementation and internal structure of Firebasin differs greatly from the Javascript SDK. This is done intentionally as an attempt to implement things as pythonically as possible.
